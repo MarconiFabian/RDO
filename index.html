@@ -1,0 +1,57 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+    <title>Diário de Obras Porto</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Diário de Obras Porto">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Diário de Obras Porto">
+    <meta name="theme-color" content="#0c4a6e">
+    
+    <!-- Icons -->
+    <link rel="apple-touch-icon" href="https://picsum.photos/192/192?text=DO">
+    <link rel="icon" type="image/png" sizes="192x192" href="https://picsum.photos/192/192?text=DO">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .animate-spin-slow {
+        animation: spin 3s linear infinite;
+      }
+      /* Hide scrollbar for Chrome, Safari and Opera */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      /* Hide scrollbar for IE, Edge and Firefox */
+      .no-scrollbar {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "date-fns/": "https://esm.sh/date-fns@^4.1.0/",
+    "date-fns": "https://esm.sh/date-fns@^4.1.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3"
+  }
+}
+</script>
+</head>
+<body class="bg-slate-50 text-slate-900 overflow-x-hidden">
+    <div id="root"></div>
+</body>
+</html>
