@@ -22,8 +22,9 @@ export default function DateRange({
             id="date"
             variant={"outline"}
             className={cn(
-              "w-full justify-start text-left font-normal",
-              !dateRange && "text-slate-500"
+              "w-full justify-start text-left font-normal border-current/20",
+              !dateRange?.from && "opacity-70",
+              className // Passa as classes de cor (como text-white) para o botão
             )}
             disabled={disabled}
           >
@@ -43,7 +44,7 @@ export default function DateRange({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
-          <div className="p-4 space-y-4">
+          <div className="p-4 space-y-4 text-slate-900">
             <div>
               <label className="text-xs text-slate-500 mb-1 block">De:</label>
               <input 

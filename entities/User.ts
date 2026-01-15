@@ -9,6 +9,7 @@ export class User {
     const defaultAdmin = {
       email: "marconifabiano@gmail.com",
       full_name: "Marconi Fabian",
+      registration: "987654321", // Added mock registration
       admin: true
     };
     localStorage.setItem('currentUser', JSON.stringify(defaultAdmin));

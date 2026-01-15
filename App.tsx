@@ -4,7 +4,9 @@ import { HomePage } from './pages/HomePage';
 import { ReportsPage } from './pages/ReportsPage';
 import { DailyReportPage } from './pages/DailyReportPage';
 import { ManagementPage } from './pages/ManagementPage';
+import { AnalysisPage } from './pages/AnalysisPage';
 import { ResourcesPage } from './pages/ResourcesPage';
+import { TeamTemplatePage } from './pages/TeamTemplatePage';
 import { Toaster } from './components/ui/use-toast';
 
 export default function App() {
@@ -14,23 +16,25 @@ export default function App() {
     const handleHashChange = () => {
       setCurrentPath(window.location.hash || '#/');
     };
-
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
   const renderPage = () => {
-    if (currentPath === '#/' || currentPath === '') return <HomePage />;
-    if (currentPath.startsWith('#/Reports')) return <ReportsPage />;
-    if (currentPath.startsWith('#/DailyReport')) return <DailyReportPage />;
-    if (currentPath.startsWith('#/Management')) return <ManagementPage />;
-    if (currentPath.startsWith('#/Resources')) return <ResourcesPage />;
+    const hash = currentPath.split('?')[0];
+    if (hash === '#/' || hash === '') return <HomePage />;
+    if (hash === '#/Reports') return <ReportsPage />;
+    if (hash === '#/DailyReport') return <DailyReportPage />;
+    if (hash === '#/Management') return <ManagementPage />;
+    if (hash === '#/Analysis') return <AnalysisPage />;
+    if (hash === '#/Resources') return <ResourcesPage />;
+    if (hash === '#/TeamTemplate') return <TeamTemplatePage />;
     
     return <HomePage />;
   };
 
   return (
-    <div className="app-container min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-sky-950 font-sans antialiased text-slate-900">
       {renderPage()}
       <Toaster />
     </div>

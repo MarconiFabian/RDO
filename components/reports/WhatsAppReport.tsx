@@ -55,6 +55,7 @@ export default function WhatsAppReport({ report, compact = false }: any) {
            `------------------------------------------\n` +
            `📅 *Data:* ${format(reportDate, "dd/MM/yyyy (EEEE)", { locale: ptBR })}\n` +
            `👤 *Responsável:* ${report.name || ""}\n` +
+           `🔢 *Matrícula:* ${report.registration || ""}\n` +
            `📝 *OM:* ${report.om_number || ""}\n` +
            `📍 *Local:* ${report.activity_location || ""}\n\n` +
            `🔧 *Serviço:* ${serviceType}\n` +
