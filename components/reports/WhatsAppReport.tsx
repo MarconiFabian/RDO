@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Button } from "../ui/button";
 import { Check, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+// Fixed: Changed locale import path to use specific locale file to avoid export resolution issues
+import { ptBR } from "date-fns/locale/pt-BR";
 import { InterventionType } from "../../entities/InterventionType";
 
 export default function WhatsAppReport({ report, compact = false }: any) {

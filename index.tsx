@@ -4,23 +4,18 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { EntityStorage } from './entities/Storage';
 
-// Inicializa dados básicos se o banco estiver vazio
-EntityStorage.seed('InterventionType', [
-  { code: 'grandes_intervencoes', name: 'Grandes Intervenções' },
-  { code: 'parada_eventual', name: 'Parada Eventual' },
-  { code: 'gpa', name: 'GPA' },
-  { code: 'briquetagem', name: 'Briquetagem' },
-  { code: 'portoes_vvs', name: 'Portões VV\'s' },
-  { code: 'outros', name: 'Outros' }
-]);
-
-EntityStorage.seed('JobFunction', [
-  { code: 'supervisor', name: 'Supervisor' },
-  { code: 'tecnico', name: 'Técnico' },
-  { code: 'mecânico', name: 'Mecânico' },
-  { code: 'soldador', name: 'Soldador' },
-  { code: 'eletricista', name: 'Eletricista' },
-  { code: 'ajudante', name: 'Ajudante' }
+// LIMPEZA TOTAL: Removido qualquer dado pré-fixado de intervenções, materiais ou funções.
+// O administrador Marconi agora tem controle total para inserir seus próprios dados.
+EntityStorage.seed('AuthorizedUser', [
+  { 
+    email: "marconifabiano@gmail.com", 
+    name: "Marconi Fabian", 
+    password: "admin", 
+    registration: "001",
+    active: true, 
+    status: 'active',
+    access_level: 'admin' 
+  }
 ]);
 
 const rootElement = document.getElementById('root');

@@ -1,10 +1,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { DailyReport } from '../entities/DailyReport';
-import { AuthorizedUser } from '../entities/AuthorizedUser';
 import { User } from '../entities/User';
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import {
   Table,
   TableBody,
@@ -18,7 +16,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { 
-  FileText, Search, Plus, History, Settings, BarChart3, Copy, Trash2, Edit2, Shield, Users
+  FileText, Search, Plus, History, Shield, Users, LogOut, Copy, Trash2, Edit2, BarChart3
 } from "lucide-react";
 import { createPageUrl } from '../utils';
 import { useToast } from "../components/ui/use-toast";
@@ -33,17 +31,25 @@ export function ReportsPage() {
   const { toast } = useToast();
 
   const loadData = useCallback(async () => {
-    const userData = await User.me();
-    setCurrentUser(userData);
-    setIsAdmin(userData.admin === true);
+    try {
+      const userData = await User.me();
+      setCurrentUser(userData);
+      setIsAdmin(userData?.admin === true);
 
-    const allReports = await DailyReport.list();
-    const visible = userData.admin === true ? allReports : allReports.filter(r => r.created_by === userData.email);
-    setReports(visible.slice(0, 30));
-    setFilteredReports(visible.slice(0, 30));
+      const allReports = await DailyReport.list();
+      const visible = userData?.admin === true ? allReports : allReports.filter(r => r.created_by === userData?.email);
+      setReports(visible);
+      setFilteredReports(visible);
+    } catch (error) {
+      console.error("Erro ao carregar relatórios:", error);
+    }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { 
+    loadData();
+    window.addEventListener('storage-updated', loadData);
+    return () => window.removeEventListener('storage-updated', loadData);
+  }, [loadData]);
 
   const handleSearch = (term: string) => {
     setSearchTerm(term);
@@ -51,17 +57,36 @@ export function ReportsPage() {
     const filtered = reports.filter(r =>
       r.om_number?.includes(term) ||
       r.activity_location?.toLowerCase().includes(searchLower) ||
-      r.work_executed?.toLowerCase().includes(searchLower)
+      r.name?.toLowerCase().includes(searchLower)
     );
     setFilteredReports(filtered);
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Deseja realmente excluir este relatório?')) {
+    if (!id) return;
+    
+    // Removido o confirm nativo para garantir execução em Mobile/PWA
+    // e fornecer feedback visual instantâneo
+    console.log(`[Reports] Solicitando exclusão do relatório ID: ${id}`);
+
+    // 1. Remove VISUALMENTE (Optimistic UI)
+    setFilteredReports(prev => prev.filter(r => r.id !== id));
+    setReports(prev => prev.filter(r => r.id !== id));
+
+    // 2. Remove do BANCO
+    try {
       await DailyReport.delete(id);
-      toast({ title: "Excluído", description: "Relatório removido com sucesso." });
-      loadData();
+      toast({ title: "Excluído", description: "Relatório removido permanentemente.", variant: "default" });
+    } catch (err) {
+      console.error(err);
+      loadData(); // Restaura em caso de erro
+      toast({ title: "Erro", description: "Falha ao apagar o relatório.", variant: "destructive" });
     }
+  };
+
+  const handleLogout = () => {
+    User.logout();
+    window.location.reload();
   };
 
   const getStatusStyle = (status: string) => {
@@ -83,7 +108,7 @@ export function ReportsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-black text-white uppercase tracking-tighter">Diário de Obras</h1>
-              <p className="text-sky-300 text-xs font-bold uppercase tracking-widest">Painel de Lançamentos</p>
+              <p className="text-sky-300 text-xs font-bold uppercase tracking-widest">Olá, {currentUser?.full_name?.split(' ')[0]}</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 w-full md:w-auto">
@@ -103,6 +128,9 @@ export function ReportsPage() {
                 </Button>
               </>
             )}
+            <Button variant="ghost" onClick={handleLogout} className="text-red-400 hover:bg-red-400/10">
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </header>
@@ -136,9 +164,15 @@ export function ReportsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredReports.map((r) => (
+                  {filteredReports.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-20 text-slate-400 italic">
+                        Nenhum relatório encontrado.
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredReports.map((r) => (
                     <TableRow key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                      <TableCell className="font-bold text-slate-600">{format(new Date(r.date), "dd/MM/yy")}</TableCell>
+                      <TableCell className="font-bold text-slate-600">{r.date ? format(new Date(r.date), "dd/MM/yy") : '---'}</TableCell>
                       <TableCell className="font-mono text-xs font-bold text-sky-700">{r.om_number}</TableCell>
                       <TableCell className="max-w-[120px] truncate font-medium">{r.activity_location}</TableCell>
                       <TableCell>
@@ -155,7 +189,7 @@ export function ReportsPage() {
                           <Button variant="ghost" size="icon" onClick={() => window.location.hash = createPageUrl('DailyReport', { copy: r.id })}>
                             <Copy className="w-4 h-4 text-purple-600" />
                           </Button>
-                          {(isAdmin || currentUser?.email === 'alexsandro.gabriel.ag@gmail.com') && (
+                          {(isAdmin || r.created_by === currentUser?.email) && (
                             <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)}>
                               <Trash2 className="w-4 h-4 text-red-500" />
                             </Button>
@@ -172,7 +206,7 @@ export function ReportsPage() {
       </main>
 
       <footer className="fixed bottom-0 w-full p-4 text-center text-sky-400 text-[10px] font-bold uppercase tracking-widest backdrop-blur-md bg-sky-950/20">
-        Desenvolvido por Marconi Fabian © 2025 | Beta 1.0
+        Desenvolvido por Marconi Fabian © 2025 | Sistema de Alta Performance
       </footer>
     </div>
   );

@@ -12,12 +12,14 @@ import {
   Users, Plus, Trash2, ArrowLeft, UserPlus, Star
 } from 'lucide-react';
 import { createPageUrl } from '../utils';
+import { useToast } from '../components/ui/use-toast';
 
 export function TeamTemplatePage() {
   const [members, setMembers] = useState<any[]>([]);
   const [jobFunctions, setJobFunctions] = useState<any[]>([]);
   const [newMember, setNewMember] = useState({ name: "", function: "" });
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadData();
@@ -30,7 +32,6 @@ export function TeamTemplatePage() {
       TeamTemplate.list(),
       JobFunction.list()
     ]);
-    // Filtrar apenas os membros do usuário atual
     setMembers(m.filter(member => member.user_email === u.email));
     setJobFunctions(jf);
   };
@@ -46,13 +47,21 @@ export function TeamTemplatePage() {
     });
     
     setNewMember({ name: "", function: "" });
+    toast({ title: "Membro Adicionado", description: "O colaborador foi salvo na sua equipe padrão." });
     loadData();
   };
 
   const handleDeleteMember = async (id: string) => {
-    if (confirm("Remover da sua equipe padrão?")) {
-      await TeamTemplate.update(id, { user_email: "removed" }); // Mock delete by changing owner
-      loadData();
+    // 1. Remove VISUALMENTE
+    setMembers(prev => prev.filter(m => m.id !== id));
+
+    // 2. Remove do BANCO
+    try {
+      await TeamTemplate.delete(id);
+      toast({ title: "Removido", description: "Colaborador removido da lista.", variant: "default" });
+    } catch (e) {
+      loadData(); // Restaura se der erro
+      toast({ title: "Erro", description: "Falha ao remover.", variant: "destructive" });
     }
   };
 
@@ -94,7 +103,7 @@ export function TeamTemplatePage() {
               <div className="space-y-1">
                 <Select 
                   value={newMember.function} 
-                  onValueChange={v => setNewMember({...newMember, function: v})}
+                  onValueChange={(v: string) => setNewMember({...newMember, function: v})}
                   placeholder="Selecione a Função"
                 >
                   {jobFunctions.map(f => <SelectItem key={f.id} value={f.name}>{f.name}</SelectItem>)}

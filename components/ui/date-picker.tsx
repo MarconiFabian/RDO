@@ -1,7 +1,8 @@
 
 import * as React from "react"
 import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
+// Fixed: Changed locale import path to use specific locale file to avoid export resolution issues
+import { ptBR } from "date-fns/locale/pt-BR"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { Button } from "./button"
 import { Calendar } from "./calendar"

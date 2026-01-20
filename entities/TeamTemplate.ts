@@ -8,4 +8,5 @@ export class TeamTemplate {
   static async get(id: string) { return EntityStorage.get<any>('TeamTemplate', id); }
   static async create(data: any) { return EntityStorage.create('TeamTemplate', data); }
   static async update(id: string, data: any) { return EntityStorage.update('TeamTemplate', id, data); }
+  static async delete(id: string) { return EntityStorage.delete('TeamTemplate', id); }
 }

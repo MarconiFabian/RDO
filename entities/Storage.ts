@@ -1,51 +1,104 @@
 
 export class EntityStorage {
+  // Retorna a lista e garante que todos tenham ID
   static list<T>(entityName: string): T[] {
-    const data = localStorage.getItem(entityName);
-    return data ? JSON.parse(data) : [];
+    try {
+      const raw = localStorage.getItem(entityName);
+      if (!raw) return [];
+
+      let data: any[] = JSON.parse(raw);
+      if (!Array.isArray(data)) return [];
+
+      let modified = false;
+      // Garante que todo item tenha um ID string
+      data = data.map(item => {
+        if (!item.id || item.id === "undefined") {
+          item.id = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+          modified = true;
+        }
+        return item;
+      });
+
+      // Se gerou IDs novos, salva imediatamente para persistir
+      if (modified) {
+        localStorage.setItem(entityName, JSON.stringify(data));
+      }
+
+      return data as T[];
+    } catch (error) {
+      console.error(`Erro ao ler ${entityName}:`, error);
+      return [];
+    }
   }
 
-  static get<T>(entityName: string, id: string): T | null {
-    const list = this.list<any>(entityName);
-    return list.find(item => item.id === id) || null;
+  static async get<T>(entityName: string, id: string): Promise<T | null> {
+    const items = this.list<any>(entityName);
+    return items.find(i => String(i.id) === String(id)) || null;
   }
 
-  static create<T>(entityName: string, data: T): T {
-    const list = this.list<any>(entityName);
-    const newItem = { 
-      ...data, 
-      id: Math.random().toString(36).substring(2, 9),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+  static async create<T>(entityName: string, data: any): Promise<T> {
+    const items = this.list<any>(entityName);
+    const newItem = {
+      ...data,
+      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+      created_at: new Date().toISOString()
     };
-    localStorage.setItem(entityName, JSON.stringify([...list, newItem]));
-    return newItem;
-  }
-
-  static update<T>(entityName: string, id: string, data: T): T {
-    const list = this.list<any>(entityName);
-    const index = list.findIndex(item => item.id === id);
-    if (index === -1) throw new Error(`${entityName} não encontrado`);
     
-    const updatedItem = { ...list[index], ...data, id, updated_at: new Date().toISOString() };
-    list[index] = updatedItem;
-    localStorage.setItem(entityName, JSON.stringify(list));
-    return updatedItem;
+    items.push(newItem);
+    localStorage.setItem(entityName, JSON.stringify(items));
+    
+    // Dispara evento para atualizar a tela
+    window.dispatchEvent(new Event('storage-updated'));
+    return newItem as T;
   }
 
-  static delete(entityName: string, id: string): void {
-    const list = this.list<any>(entityName);
-    const filtered = list.filter(item => item.id !== id);
-    localStorage.setItem(entityName, JSON.stringify(filtered));
+  static async update<T>(entityName: string, id: string, changes: any): Promise<T> {
+    const items = this.list<any>(entityName);
+    const index = items.findIndex(i => String(i.id) === String(id));
+
+    if (index === -1) throw new Error("Item não encontrado");
+
+    items[index] = { ...items[index], ...changes };
+    localStorage.setItem(entityName, JSON.stringify(items));
+    
+    window.dispatchEvent(new Event('storage-updated'));
+    return items[index] as T;
+  }
+
+  static async delete(entityName: string, id: string): Promise<void> {
+    const items = this.list<any>(entityName);
+    const originalLength = items.length;
+
+    // Encontra o index exato
+    const index = items.findIndex(i => String(i.id) === String(id));
+
+    if (index !== -1) {
+      // Remove 1 item na posição encontrada
+      items.splice(index, 1);
+      
+      // Salva a nova lista
+      localStorage.setItem(entityName, JSON.stringify(items));
+      console.log(`[Storage] Deletado item index ${index} de ${entityName}. Novo tamanho: ${items.length}`);
+      
+      // Atualiza interface
+      window.dispatchEvent(new Event('storage-updated'));
+    } else {
+      console.warn(`[Storage] Tentativa de deletar ID ${id} em ${entityName} falhou: ID não encontrado.`);
+    }
+    
+    return Promise.resolve();
   }
 
   static seed(entityName: string, defaults: any[]) {
-    if (this.list(entityName).length === 0) {
-      localStorage.setItem(entityName, JSON.stringify(defaults.map(d => ({
-        ...d,
-        id: Math.random().toString(36).substring(2, 9),
-        created_at: new Date().toISOString()
-      }))));
+    // Apenas seed se não existir nada no localStorage para essa chave
+    if (!localStorage.getItem(entityName)) {
+       // Cria com IDs
+       const withIds = defaults.map(d => ({
+         ...d,
+         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+         created_at: new Date().toISOString()
+       }));
+       localStorage.setItem(entityName, JSON.stringify(withIds));
     }
   }
 }
