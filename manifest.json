@@ -1,0 +1,22 @@
+
+{
+  "short_name": "RDO Online",
+  "name": "RDO Online - Gestão de Obras",
+  "icons": [
+    {
+      "src": "https://picsum.photos/192/192?text=RDO",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://picsum.photos/512/512?text=RDO",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "./index.html",
+  "display": "standalone",
+  "theme_color": "#0f2441",
+  "background_color": "#0f2441",
+  "orientation": "portrait"
+}

@@ -1,5 +1,5 @@
 {
-  "name": "Diário de Obras Porto",
-  "description": "Aplicativo profissional para gestão e registro de diários de obras, permitindo controle de intervenções, equipe, materiais e condições climáticas com exportação para WhatsApp e Excel.",
+  "name": "RDO Online",
+  "description": "Aplicativo profissional para gestão e registro de Relatório Diário de Obras (RDO) para áreas industriais e construção civil.",
   "requestFramePermissions": []
 }

@@ -16,7 +16,7 @@ export function HomePage() {
       <div className="bg-white/10 p-8 rounded-full mb-6">
         <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
       </div>
-      <h1 className="text-3xl font-bold mb-2">Diário de Obras Porto</h1>
+      <h1 className="text-3xl font-bold mb-2">RDO Online</h1>
       <p className="text-blue-200">Carregando seus relatórios...</p>
     </div>
   );

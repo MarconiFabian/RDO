@@ -19,7 +19,7 @@ export class DailyReport {
     const user = JSON.parse(localStorage.getItem('currentUser') || '{}');
     return EntityStorage.create('DailyReport', { 
       ...data, 
-      created_by: user.email,
+      created_by: user.name, // Changed to Name as the primary reference
       created_at: new Date().toISOString() 
     });
   }

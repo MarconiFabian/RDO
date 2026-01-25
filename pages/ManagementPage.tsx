@@ -1,16 +1,14 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { EntityStorage } from '../entities/Storage';
 import { User } from '../entities/User';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
-import { Table, TableBody, TableCell, TableRow } from '../components/ui/table';
 import { 
-  Shield, Trash2, ArrowLeft, Users, Wrench, List, Package, FileText, Power, PowerOff, AlertCircle, Wrench as ToolIcon, Download
+  Shield, Trash2, ArrowLeft, Users, Wrench, List, Package, FileText, 
+  Power, PowerOff, Download, Plus,
+  Database, ImageIcon, Upload, RefreshCcw, User as UserIcon
 } from 'lucide-react';
-import { createPageUrl } from '../utils';
+import { createPageUrl, cn } from '../utils';
 import { useToast } from '../components/ui/use-toast';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
@@ -19,9 +17,13 @@ export function ManagementPage() {
   const [activeTab, setActiveTab] = useState("reports");
   const [dataList, setDataList] = useState<any[]>([]);
   const [isAuthorized, setIsAuthorized] = useState(false);
+  
+  // Estado para visualização da Logo
+  const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('custom_logo'));
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const { toast } = useToast();
 
-  // Mapeia a aba para o nome da tabela no banco
   const getEntityName = (tab: string) => {
     const map: Record<string, string> = {
       'reports': 'DailyReport',
@@ -33,10 +35,21 @@ export function ManagementPage() {
     return map[tab] || '';
   };
 
-  // Função para carregar os dados da aba atual
+  const getTabLabel = (tab: string) => {
+    const map: Record<string, string> = {
+      'reports': 'Diários',
+      'users': 'Usuários',
+      'interventions': 'Intervenções',
+      'materials': 'Materiais',
+      'functions': 'Funções'
+    };
+    return map[tab] || '';
+  };
+
   const refreshData = useCallback(async () => {
     const currentUser = await User.me();
-    if (currentUser?.email !== 'marconifabiano@gmail.com') {
+    // Verifica por nome ou flag de admin
+    if (currentUser?.name !== 'Marconi Fabian' && currentUser?.admin !== true) {
       window.location.hash = '#/';
       return;
     }
@@ -49,37 +62,55 @@ export function ManagementPage() {
 
   useEffect(() => {
     refreshData();
-    // Ouve atualizações de outras partes do app para manter a lista sincronizada
-    window.addEventListener('storage-updated', refreshData);
-    return () => window.removeEventListener('storage-updated', refreshData);
+    const handleStorage = () => {
+        refreshData();
+        setCustomLogo(localStorage.getItem('custom_logo'));
+    };
+    window.addEventListener('storage-updated', handleStorage);
+    return () => window.removeEventListener('storage-updated', handleStorage);
   }, [refreshData]);
 
-  // Função de exclusão DIRETA
-  const handleExcluir = async (id: string, nome: string) => {
-    console.log(`[Management] Solicitando exclusão de ID: ${id} na aba: ${activeTab}`);
-
-    if (!id) {
-        toast({ title: "Erro Crítico", description: "Item sem ID não pode ser apagado.", variant: "destructive" });
-        return;
+  // Função de Upload da Logo
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) { // Limite de 2MB
+         toast({ title: "Arquivo muito grande", description: "Use uma imagem menor que 2MB.", variant: "destructive" });
+         return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        localStorage.setItem('custom_logo', base64);
+        setCustomLogo(base64);
+        toast({ title: "Logomarca Atualizada", description: "A nova logo foi aplicada em todo o sistema." });
+        window.dispatchEvent(new Event('storage-updated'));
+      };
+      reader.readAsDataURL(file);
     }
+  };
 
+  // Função para Resetar Logo
+  const handleResetLogo = () => {
+    if (window.confirm("Deseja remover a logo atual e voltar ao padrão?")) {
+        localStorage.removeItem('custom_logo');
+        setCustomLogo(null);
+        toast({ title: "Logo Removida", description: "O sistema voltou a usar o ícone padrão." });
+        window.dispatchEvent(new Event('storage-updated'));
+    }
+  };
+
+  const handleExcluir = async (id: string, nome: string) => {
+    if (!id) return;
     try {
-      // 1. Efeito Visual Imediato (Remove da tela antes de processar)
       setDataList(current => current.filter(item => item.id !== id));
-
-      // 2. Remove do Banco de Dados
       const entity = getEntityName(activeTab);
       await EntityStorage.delete(entity, id);
-      
-      console.log(`[Management] Sucesso na exclusão do banco.`);
-      toast({ title: "Removido", description: `${nome} apagado com sucesso.`, variant: "default" });
-      
-      // 3. Garantia extra: Recarrega os dados reais após um breve delay
+      toast({ title: "Removido", description: `${nome} apagado.`, variant: "default" });
       setTimeout(refreshData, 100);
     } catch (error) {
-      console.error(`[Management] Falha ao excluir:`, error);
-      refreshData(); // Restaura a lista em caso de erro
-      toast({ title: "Erro", description: "Não foi possível apagar o item do banco de dados.", variant: "destructive" });
+      refreshData();
+      toast({ title: "Erro", description: "Falha ao apagar.", variant: "destructive" });
     }
   };
 
@@ -96,190 +127,282 @@ export function ManagementPage() {
       data.code = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '_');
     }
 
-    // Cria e já atualiza a lista visualmente
     await EntityStorage.create(entity, data);
-    
     (e.target as HTMLFormElement).reset();
-    toast({ title: "Adicionado", description: "Novo item cadastrado com sucesso!" });
+    toast({ title: "Adicionado", description: "Item criado com sucesso!" });
     refreshData();
   };
 
   const handleToggleUser = async (user: any) => {
-    if (user.email === 'marconifabiano@gmail.com') return;
+    if (user.name === 'Marconi Fabian') return; // Protege o admin principal
     const newStatus = user.status === 'active' ? 'blocked' : 'active';
-    
-    // Atualiza visualmente primeiro
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus, active: newStatus === 'active' } : u));
-    
     await EntityStorage.update('AuthorizedUser', user.id, { status: newStatus, active: newStatus === 'active' });
-    toast({ title: "Usuário Atualizado" });
+    toast({ title: "Status Atualizado" });
+  };
+
+  const safeFormatDate = (dateString: any) => {
+    try {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '';
+      return format(date, 'dd/MM/yyyy');
+    } catch (e) {
+      return '';
+    }
   };
 
   const handleExportExcel = () => {
     if (dataList.length === 0) {
-      toast({ title: "Atenção", description: "Não há dados para exportar.", variant: "warning" });
+      toast({ title: "Vazio", description: "Sem dados para exportar.", variant: "warning" });
       return;
     }
-
+    
     let exportData = [];
-
     if (activeTab === 'reports') {
       exportData = dataList.map(item => ({
-        "Data": item.date ? format(new Date(item.date), 'dd/MM/yyyy') : '',
+        "Data": safeFormatDate(item.date),
         "OM": item.om_number,
         "Responsável": item.name,
-        "Matrícula": item.registration,
         "Local": item.activity_location,
-        "Tipo Serviço": item.service_type,
-        "Intervenção": item.intervention_type,
-        "Status": item.status,
-        "Início": item.activity_start_time,
-        "Fim": item.activity_end_time,
-        "Trabalho Executado": item.work_executed,
-        "Ocorrências": item.occurrences,
-        "Vol. Andaime (m³)": item.scaffolding_volume || 0
+        "Status": item.status
       }));
     } else if (activeTab === 'users') {
       exportData = dataList.map(item => ({
         "Nome": item.name,
-        "Email": item.email,
         "Matrícula": item.registration,
-        "Status": item.status === 'active' ? 'Ativo' : (item.status === 'pending' ? 'Pendente' : 'Bloqueado'),
-        "Nível Acesso": item.access_level || 'viewer',
-        "Último Acesso": item.created_at ? format(new Date(item.created_at), 'dd/MM/yyyy HH:mm') : ''
+        "Status": item.status
       }));
     } else {
-      // Genérico para outras abas
-      exportData = dataList.map(item => ({
-        "ID": item.id,
-        "Nome": item.name,
-        "Código": item.code || '',
-        "Ativo": item.active ? "Sim" : "Não"
-      }));
+      exportData = dataList.map(item => ({ "ID": item.id, "Nome": item.name }));
     }
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Dados");
-    
-    const fileName = `Exportacao_${activeTab}_${format(new Date(), 'dd-MM-yyyy')}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-    
-    toast({ title: "Exportação Concluída", description: `Arquivo ${fileName} gerado.` });
+    XLSX.writeFile(wb, `Gestao_${activeTab}.xlsx`);
+    toast({ title: "Sucesso", description: "Download iniciado." });
   };
 
   if (!isAuthorized) return null;
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-10">
-      <header className="bg-sky-950 text-white p-6 shadow-lg sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => window.location.hash = createPageUrl('Reports')} className="text-white hover:bg-white/10">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-black uppercase flex items-center tracking-tight">
-                <Shield className="w-6 h-6 mr-2 text-sky-400" /> Gestão Administrativa
-              </h1>
-              <p className="text-[10px] font-bold text-sky-300 uppercase opacity-70">Marconi Fabiano</p>
+    <div className="min-h-screen bg-[#0f2441] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] pb-10 font-sans">
+      
+      {/* Header */}
+      <div className="pt-8 pb-6 px-6">
+        <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-4">
+                <button 
+                    onClick={() => window.location.hash = createPageUrl('Reports')} 
+                    className="text-white/80 hover:text-white transition-colors"
+                >
+                  <ArrowLeft className="w-6 h-6" />
+                </button>
+                <div>
+                    <span className="text-[10px] font-bold text-sky-400 uppercase tracking-widest block mb-0.5">Admin</span>
+                    <h1 className="text-xl font-black text-white leading-none">Painel de Gestão</h1>
+                </div>
             </div>
-          </div>
-          <Button 
-            onClick={() => window.location.hash = '#/TestDelete'} 
-            className="bg-red-600 hover:bg-red-700 text-white font-bold border border-red-400 opacity-80 hover:opacity-100"
-            size="sm"
-          >
-            <ToolIcon className="w-4 h-4 mr-2" />
-            DIAGNÓSTICO
-          </Button>
+            
+            {/* Header Right Area */}
+            <div></div>
         </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="bg-white border w-full justify-start overflow-x-auto h-auto p-1 shadow-sm gap-1">
-            <TabsTrigger value="reports" className="gap-2"><FileText className="w-4 h-4" /> Diários</TabsTrigger>
-            <TabsTrigger value="users" className="gap-2"><Users className="w-4 h-4" /> Usuários</TabsTrigger>
-            <TabsTrigger value="interventions" className="gap-2"><Wrench className="w-4 h-4" /> Intervenções</TabsTrigger>
-            <TabsTrigger value="materials" className="gap-2"><Package className="w-4 h-4" /> Materiais</TabsTrigger>
-            <TabsTrigger value="functions" className="gap-2"><List className="w-4 h-4" /> Funções</TabsTrigger>
-          </TabsList>
+        {/* Navigation Tabs - Grid Layout */}
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 pb-2">
+            {[
+                { id: 'reports', icon: FileText, label: 'Diários' },
+                { id: 'users', icon: Users, label: 'Usuários' },
+                { id: 'interventions', icon: Wrench, label: 'Interv.' },
+                { id: 'materials', icon: Package, label: 'Materiais' },
+                { id: 'functions', icon: List, label: 'Funções' }
+            ].map(tab => (
+                <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                        "flex flex-col items-center justify-center w-full h-[72px] rounded-xl transition-all border",
+                        activeTab === tab.id 
+                            ? "bg-white border-white shadow-lg scale-105 z-10" 
+                            : "bg-[#1e3a5f] border-white/5 text-slate-400 hover:bg-[#2d4b75]"
+                    )}
+                >
+                    <tab.icon className={cn("w-6 h-6 mb-1.5", activeTab === tab.id ? "text-[#0f2441]" : "text-slate-400")} />
+                    <span className={cn("text-[10px] font-bold uppercase", activeTab === tab.id ? "text-[#0f2441]" : "text-slate-400")}>{tab.label}</span>
+                </button>
+            ))}
+        </div>
+      </div>
 
-          <Card className="border-none shadow-xl overflow-hidden">
-            <CardHeader className="bg-white border-b flex flex-col md:flex-row justify-between items-center gap-4 p-4">
-              <CardTitle className="text-xs font-black uppercase text-sky-900">
-                Lista de {activeTab} ({dataList.length})
-              </CardTitle>
+      {/* Main Content Card */}
+      <main className="px-4 space-y-4">
+        
+        {/* LOGO CONFIG CARD (EDITABLE) */}
+        <div className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4 mb-2">
+            <div className="flex items-center gap-3 w-full">
+                 <div className="bg-sky-50 p-2.5 rounded-xl border border-sky-100 shrink-0">
+                     <ImageIcon className="w-6 h-6 text-sky-600" />
+                 </div>
+                 <div>
+                     <h3 className="text-xs font-black text-[#0f2441] uppercase">Identidade Visual</h3>
+                     <p className="text-[10px] text-slate-400 font-medium leading-tight">Envie sua logo para usar no app.</p>
+                 </div>
+            </div>
+            
+            <div className="flex items-center gap-3 w-full md:w-auto">
+                 {/* Preview Area */}
+                 <div className="h-12 w-28 border border-slate-200 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden relative shrink-0">
+                     {customLogo ? (
+                         <img src={customLogo} alt="Logo Atual" className="h-full w-full object-contain p-1" />
+                     ) : (
+                         <span className="text-[9px] text-slate-300 font-bold uppercase">Padrão</span>
+                     )}
+                 </div>
 
-              <div className="flex gap-2 w-full md:w-auto">
-                {['reports', 'users'].includes(activeTab) && (
-                  <Button 
-                    onClick={handleExportExcel} 
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold"
-                    size="sm"
-                  >
-                    <Download className="w-4 h-4 mr-2" /> EXCEL
-                  </Button>
-                )}
+                 {/* Hidden Input */}
+                 <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/*" 
+                    onChange={handleLogoUpload}
+                 />
 
-                {['interventions', 'materials', 'functions'].includes(activeTab) && (
-                  <form onSubmit={handleSalvarNovo} className="flex gap-2 w-full md:w-auto">
-                    <Input name="name" placeholder="Nome do novo item..." className="h-9 bg-slate-50 border-slate-200" required />
-                    <Button type="submit" size="sm" className="bg-sky-900 text-white font-bold px-6">ADD</Button>
-                  </form>
-                )}
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-0 bg-white">
-              <Table>
-                <TableBody>
-                  {dataList.length === 0 ? (
-                    <TableRow>
-                      <TableCell className="text-center py-20 text-slate-400">
-                        <AlertCircle className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                        Nenhum registro encontrado nesta categoria.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    dataList.map((item) => (
-                      <TableRow key={item.id} className="hover:bg-slate-50/50 transition-all">
-                        <TableCell className="py-4 px-6">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-sky-950">
-                              {activeTab === 'reports' ? `Relatório OM: ${item.om_number}` : (item.name || item.email)}
-                            </span>
-                            {item.email && <span className="text-[10px] text-slate-400 font-bold">{item.email}</span>}
-                            {activeTab === 'reports' && <span className="text-[10px] text-slate-400 uppercase">{item.activity_location} - {format(new Date(item.date), 'dd/MM/yyyy')}</span>}
-                            
-                            <span className="text-[8px] text-slate-200 font-mono mt-1 select-none opacity-50">ID: {item.id}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right px-6 space-x-2">
-                          {activeTab === 'users' && item.email !== 'marconifabiano@gmail.com' && (
-                            <Button variant="ghost" size="icon" onClick={() => handleToggleUser(item)}>
-                              {item.status === 'active' ? <PowerOff className="w-4 h-4 text-amber-500" /> : <Power className="w-4 h-4 text-green-500" />}
-                            </Button>
-                          )}
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="bg-red-50 hover:bg-red-600 hover:text-white text-red-500 transition-colors border border-red-100"
-                            onClick={() => handleExcluir(item.id, item.name || item.om_number || item.email)}
-                            title="Excluir permanentemente"
-                          >
+                 {/* Action Buttons */}
+                 <div className="flex gap-2">
+                     <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="bg-[#0f3460] hover:bg-[#0f2441] text-white rounded-xl px-3 py-2 flex items-center justify-center transition-colors shadow-lg shadow-blue-900/10"
+                        title="Enviar Logo"
+                     >
+                        <Upload className="w-4 h-4" />
+                     </button>
+                     
+                     {customLogo && (
+                         <button 
+                            onClick={handleResetLogo}
+                            className="bg-red-50 hover:bg-red-100 text-red-500 rounded-xl px-3 py-2 flex items-center justify-center transition-colors"
+                            title="Restaurar Padrão"
+                         >
                             <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </Tabs>
+                         </button>
+                     )}
+                 </div>
+            </div>
+        </div>
+
+        {/* Info & Actions Bar */}
+        <div className="flex justify-between items-center px-2 pt-2">
+            <span className="text-[10px] font-bold text-sky-200 uppercase tracking-wider">
+                {dataList.length} Registros encontrados
+            </span>
+            {['reports', 'users'].includes(activeTab) && (
+                <button 
+                    onClick={handleExportExcel}
+                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase shadow-lg transition-colors"
+                >
+                    <Download className="w-3 h-3" /> Excel
+                </button>
+            )}
+        </div>
+
+        {/* Input Form for Simple Lists */}
+        {['interventions', 'materials', 'functions'].includes(activeTab) && (
+            <div className="bg-white p-3 rounded-2xl shadow-xl border border-slate-100 flex gap-2 items-center">
+                <div className="w-10 h-10 bg-[#0f3460] rounded-xl flex items-center justify-center text-white shrink-0">
+                    <Plus className="w-5 h-5" />
+                </div>
+                <form onSubmit={handleSalvarNovo} className="flex-1 flex gap-2">
+                    <input 
+                        name="name" 
+                        className="w-full bg-slate-50 rounded-xl px-4 text-sm font-medium outline-none placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-sky-100 transition-all"
+                        placeholder={`Adicionar novo em ${getTabLabel(activeTab)}...`}
+                        required
+                    />
+                    <button type="submit" className="bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-black uppercase px-4 rounded-xl transition-colors">
+                        Salvar
+                    </button>
+                </form>
+            </div>
+        )}
+
+        {/* Data List */}
+        <div className="space-y-3 pb-24">
+            {dataList.length === 0 ? (
+                <div className="text-center py-20 flex flex-col items-center justify-center opacity-30">
+                    <Database className="w-16 h-16 text-white mb-4" />
+                    <p className="text-white font-medium">Nenhum dado encontrado</p>
+                </div>
+            ) : (
+                dataList.map((item) => (
+                    <div 
+                        key={item.id} 
+                        className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 flex justify-between items-center group relative overflow-hidden"
+                    >
+                        {/* Avatar do Usuário (Se for aba Usuários) */}
+                        {activeTab === 'users' && (
+                            <div className="mr-3 shrink-0">
+                                <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
+                                    {item.avatar ? (
+                                        <img src={item.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <UserIcon className="w-5 h-5 text-slate-300" />
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex-1 min-w-0 pr-4">
+                            <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-bold text-[#0f2441] truncate text-sm">
+                                    {activeTab === 'reports' ? `OM: ${item.om_number}` : (item.name || item.email)}
+                                </h3>
+                                {activeTab === 'users' && (item.admin || item.name === 'Marconi Fabian') && (
+                                    <Shield className="w-3.5 h-3.5 text-blue-600 fill-blue-100" />
+                                )}
+                            </div>
+                            
+                            <div className="flex flex-col text-[10px] text-slate-400 font-medium">
+                                {activeTab === 'users' && <span className="truncate">Matrícula: {item.registration}</span>}
+                                {activeTab === 'reports' && (
+                                    <span>{safeFormatDate(item.date)} • {item.activity_location}</span>
+                                )}
+                                {activeTab === 'users' && (
+                                    <span className={item.status === 'active' ? 'text-green-600' : 'text-amber-500'}>
+                                        {item.status === 'active' ? '● Ativo' : '● Pendente/Bloqueado'}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            {activeTab === 'users' && item.name !== 'Marconi Fabian' && (
+                                <button 
+                                    onClick={() => handleToggleUser(item)}
+                                    className={cn(
+                                        "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                        item.status === 'active' 
+                                            ? "bg-green-100 text-green-600 hover:bg-green-200" 
+                                            : "bg-amber-100 text-amber-600 hover:bg-amber-200"
+                                    )}
+                                >
+                                    {item.status === 'active' ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+                                </button>
+                            )}
+                            
+                            <button 
+                                onClick={() => handleExcluir(item.id, item.name || item.om_number)}
+                                className="w-8 h-8 bg-red-50 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-100 transition-colors"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                ))
+            )}
+        </div>
+
       </main>
     </div>
   );

@@ -16,6 +16,9 @@ export default function DatePicker({
   disabled,
   ...props
 }: any) {
+  
+  const isValidDate = (d: any) => d instanceof Date && !isNaN(d.getTime());
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -29,7 +32,7 @@ export default function DatePicker({
           disabled={disabled}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {selected ? format(selected, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : <span>Selecionar data</span>}
+          {selected && isValidDate(selected) ? format(selected, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : <span>Selecionar data</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">

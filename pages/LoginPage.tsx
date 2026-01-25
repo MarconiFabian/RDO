@@ -1,165 +1,248 @@
 
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
+import React, { useState, useEffect } from 'react';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { User } from '../entities/User';
 import { useToast } from '../components/ui/use-toast';
-import { Shield, Lock, UserPlus, Anchor } from 'lucide-react';
+import { Loader2, ImageIcon, User as UserIcon, Lock, Hash } from 'lucide-react';
+import { cn } from '../utils';
 
 export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   
+  // Custom Logo State (Read Only)
+  const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('custom_logo'));
+
   // Login State
-  const [loginEmail, setLoginEmail] = useState('');
+  const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
 
   // Register State
   const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
   const [regPass, setRegPass] = useState('');
   const [regRegistration, setRegRegistration] = useState('');
 
+  // Escuta atualizações de storage caso o admin mude a logo em outra aba
+  useEffect(() => {
+    const handleStorage = () => {
+        setCustomLogo(localStorage.getItem('custom_logo'));
+    };
+    window.addEventListener('storage-updated', handleStorage);
+    return () => window.removeEventListener('storage-updated', handleStorage);
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    const res = await User.login(loginEmail, loginPass);
-    if (res.success) {
-      toast({ title: "Bem-vindo!", description: res.message, variant: "success" });
-      window.location.hash = '#/Reports';
-    } else {
-      toast({ title: "Erro de Acesso", description: res.message, variant: "destructive" });
+    if (loading) return;
+    
+    if (!loginName || !loginPass) {
+        toast({ title: "Campos vazios", description: "Preencha nome e senha.", variant: "warning" });
+        return;
     }
-    setLoading(false);
+    
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 500));
+
+    try {
+      const res = await User.login(loginName, loginPass);
+      if (res.success) {
+        toast({ title: "Bem-vindo!", description: res.message, variant: "success" });
+        window.dispatchEvent(new Event('auth-update'));
+        window.location.hash = '#/Reports';
+      } else {
+        toast({ title: "Acesso Negado", description: res.message, variant: "destructive" });
+        setLoading(false);
+      }
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao processar login.", variant: "destructive" });
+      setLoading(false);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    const res = await User.register({
-      name: regName,
-      email: regEmail,
-      password: regPass,
-      registration: regRegistration
-    });
-    
-    if (res.success) {
-      toast({ title: "Sucesso!", description: res.message, variant: "success" });
-      // Limpa campos e volta para login seria ideal, mas aqui apenas avisamos
-    } else {
-      toast({ title: "Erro no Cadastro", description: res.message, variant: "destructive" });
+    if (loading) return;
+
+    if (!regName || !regRegistration || !regPass) {
+        toast({ title: "Campos vazios", description: "Preencha todos os campos.", variant: "warning" });
+        return;
     }
-    setLoading(false);
+    
+    setLoading(true);
+    try {
+      const res = await User.register({
+        name: regName,
+        password: regPass,
+        registration: regRegistration
+      });
+      if (res.success) {
+        toast({ title: "Conta Criada", description: res.message, variant: "success" });
+        setActiveTab('login');
+        setRegName(''); setRegPass(''); setRegRegistration('');
+      } else {
+        toast({ title: "Erro no Cadastro", description: res.message, variant: "destructive" });
+      }
+    } catch (error) {
+        toast({ title: "Erro", description: "Falha ao registrar.", variant: "destructive" });
+    } finally {
+        setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-950 via-blue-900 to-sky-950 p-4">
-      <div className="w-full max-w-md space-y-8 animate-in fade-in zoom-in duration-500">
-        <div className="text-center space-y-2">
-          <div className="inline-flex p-3 bg-white/10 rounded-2xl backdrop-blur-xl border border-white/20 mb-4">
-            <Anchor className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Porto Diário</h1>
-          <p className="text-sky-300 text-xs font-bold uppercase tracking-widest">Sistema de Registro de Obras</p>
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#0f2441] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
+      
+      {/* Background Overlay for better text readability */}
+      <div className="absolute inset-0 bg-[#0f2441]/80 pointer-events-none"></div>
+
+      {/* Logo Area */}
+      <div className="flex flex-col items-center mb-2 animate-in fade-in zoom-in duration-500 text-center z-10 relative">
+        
+        {/* LOCAL PARA INSERIR A FOTO DA EMPRESA (Visualização Apenas) */}
+        <div 
+            className="bg-white p-2 rounded-2xl mb-2 shadow-2xl ring-4 ring-white/10 h-24 w-auto px-4 flex items-center justify-center overflow-hidden relative"
+        >
+            {customLogo ? (
+                <img 
+                    src={customLogo} 
+                    alt="Logo Empresa" 
+                    className="h-full w-auto object-contain"
+                />
+            ) : (
+                <div className="flex flex-col items-center text-slate-300">
+                    <ImageIcon className="w-8 h-8 mb-1" />
+                    <span className="text-[10px] font-bold uppercase">RDO Online</span>
+                </div>
+            )}
         </div>
 
-        <Card className="bg-white/95 backdrop-blur-xl border-none shadow-2xl overflow-hidden">
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 rounded-none h-12 bg-slate-100/50">
-              <TabsTrigger value="login" className="data-[state=active]:bg-white">LOGIN</TabsTrigger>
-              <TabsTrigger value="register" className="data-[state=active]:bg-white">REGISTRAR</TabsTrigger>
-            </TabsList>
+        <h1 className="text-2xl font-black text-white tracking-tight uppercase">RDO Online</h1>
+        <p className="text-sky-400 text-[10px] font-bold uppercase tracking-[0.3em] mt-1">Gestão de Obras</p>
+      </div>
 
-            <TabsContent value="login" className="p-6 space-y-4">
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-slate-500">E-mail Corporativo</Label>
-                  <Input 
-                    type="email" 
-                    placeholder="ex@empresa.com.br" 
-                    value={loginEmail}
-                    onChange={e => setLoginEmail(e.target.value)}
+      {/* Main Card */}
+      <div className="w-full max-w-sm bg-white rounded-[32px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-8 duration-700 z-10">
+        
+        {/* Custom Tabs */}
+        <div className="flex border-b border-slate-100">
+          <button 
+            type="button"
+            onClick={() => setActiveTab('login')}
+            className={cn(
+              "flex-1 py-4 text-sm font-black uppercase tracking-wide transition-colors outline-none",
+              activeTab === 'login' ? "text-[#0f2441] border-b-2 border-[#0f2441]" : "text-slate-400 bg-slate-50/50 hover:bg-slate-50"
+            )}
+          >
+            Entrar
+          </button>
+          <button 
+            type="button"
+            onClick={() => setActiveTab('register')}
+            className={cn(
+              "flex-1 py-4 text-sm font-black uppercase tracking-wide transition-colors outline-none",
+              activeTab === 'register' ? "text-[#0f2441] border-b-2 border-[#0f2441]" : "text-slate-400 bg-slate-50/50 hover:bg-slate-50"
+            )}
+          >
+            Cadastro
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-8">
+          {activeTab === 'login' ? (
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div className="space-y-2">
+                <Label className="text-[11px] font-bold text-slate-500 uppercase">Nome</Label>
+                <div className="relative">
+                    <UserIcon className="absolute left-3 top-3.5 h-5 w-5 text-slate-300" />
+                    <Input 
+                    type="text" 
+                    value={loginName}
+                    onChange={e => setLoginName(e.target.value)}
+                    placeholder="Seu nome"
                     required 
-                  />
+                    className="bg-slate-100/50 border-slate-200 h-12 rounded-xl pl-10 focus:bg-white transition-all text-slate-800"
+                    />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-slate-500">Senha</Label>
-                  <Input 
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[11px] font-bold text-slate-500 uppercase">Senha</Label>
+                <div className="relative">
+                    <Lock className="absolute left-3 top-3.5 h-5 w-5 text-slate-300" />
+                    <Input 
                     type="password" 
-                    placeholder="••••••••" 
                     value={loginPass}
                     onChange={e => setLoginPass(e.target.value)}
+                    placeholder="Sua senha"
                     required 
-                  />
+                    className="bg-slate-100/50 border-slate-200 h-12 rounded-xl pl-10 focus:bg-white transition-all text-slate-800"
+                    />
                 </div>
-                <Button type="submit" disabled={loading} className="w-full bg-sky-900 text-white font-bold h-11">
-                  {loading ? "AUTENTICANDO..." : "ENTRAR NO SISTEMA"}
-                </Button>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="register" className="p-6 space-y-4">
-              <form onSubmit={handleRegister} className="space-y-4">
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-slate-500">Nome Completo</Label>
-                  <Input 
-                    placeholder="Como será exibido no relatório" 
+              </div>
+              
+              <Button type="submit" disabled={loading} className="w-full h-12 bg-[#0f3460] hover:bg-[#0f2441] text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-blue-900/20 mt-2">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Acessar Sistema"}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-4">
+              
+               <div className="space-y-2">
+                <Label className="text-[11px] font-bold text-slate-500 uppercase">Nome Completo</Label>
+                <div className="relative">
+                    <UserIcon className="absolute left-3 top-3 h-5 w-5 text-slate-300" />
+                    <Input 
                     value={regName}
                     onChange={e => setRegName(e.target.value)}
+                    placeholder="Ex: Marconi Fabian"
                     required 
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-500">E-mail</Label>
-                    <Input 
-                      type="email" 
-                      placeholder="Email corporativo" 
-                      value={regEmail}
-                      onChange={e => setRegEmail(e.target.value)}
-                      required 
+                    className="bg-slate-100/50 border-slate-200 h-11 rounded-xl pl-10"
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-500">Matrícula</Label>
-                    <Input 
-                      placeholder="ID Funcional" 
-                      value={regRegistration}
-                      onChange={e => setRegRegistration(e.target.value)}
-                      required 
-                    />
-                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-slate-500">Criar Senha</Label>
-                  <Input 
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[11px] font-bold text-slate-500 uppercase">Matrícula</Label>
+                <div className="relative">
+                    <Hash className="absolute left-3 top-3 h-5 w-5 text-slate-300" />
+                    <Input 
+                    value={regRegistration}
+                    onChange={e => setRegRegistration(e.target.value)}
+                    placeholder="Ex: 00123"
+                    required 
+                    className="bg-slate-100/50 border-slate-200 h-11 rounded-xl pl-10"
+                    />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[11px] font-bold text-slate-500 uppercase">Senha</Label>
+                <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-300" />
+                    <Input 
                     type="password" 
-                    placeholder="Mínimo 6 caracteres" 
                     value={regPass}
                     onChange={e => setRegPass(e.target.value)}
+                    placeholder="Crie uma senha"
                     required 
-                  />
+                    className="bg-slate-100/50 border-slate-200 h-11 rounded-xl pl-10"
+                    />
                 </div>
-                <Button type="submit" disabled={loading} className="w-full bg-sky-900 text-white font-bold h-11">
-                  {loading ? "PROCESSANDO..." : "SOLICITAR ACESSO"}
-                </Button>
-                <p className="text-[10px] text-center text-slate-400 font-medium">
-                  Seu cadastro passará por aprovação do administrador antes de liberar o acesso.
-                </p>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </Card>
-        
-        <div className="text-center">
-          <p className="text-sky-400/60 text-[10px] font-bold uppercase tracking-widest">
-            Segurança Portuária Monitorada
-          </p>
+              </div>
+
+              <Button type="submit" disabled={loading} className="w-full h-12 bg-[#0f3460] hover:bg-[#0f2441] text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-blue-900/20 mt-2">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar Conta"}
+              </Button>
+            </form>
+          )}
         </div>
       </div>
+
+      <div className="mt-8 text-center opacity-40 z-10">
+        <p className="text-[9px] text-white">Versão 1.0.0 • RDO Online</p>
+      </div>
+
     </div>
   );
 }

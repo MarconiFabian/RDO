@@ -8,7 +8,6 @@ import { AnalysisPage } from './pages/AnalysisPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 import { TeamTemplatePage } from './pages/TeamTemplatePage';
 import { LoginPage } from './pages/LoginPage';
-import { TestDeletionPage } from './pages/TestDeletionPage';
 import { Toaster } from './components/ui/use-toast';
 import { User } from './entities/User';
 
@@ -17,21 +16,31 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const user = await User.me();
-      setCurrentUser(user);
-      setLoading(false);
-    };
+  const checkAuth = async () => {
+    const user = await User.me();
+    setCurrentUser(user);
+    setLoading(false);
+  };
 
+  useEffect(() => {
     checkAuth();
 
     const handleHashChange = () => {
       setCurrentPath(window.location.hash || '#/');
       checkAuth();
     };
+
+    const handleAuthUpdate = () => {
+      checkAuth();
+    };
+
     window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('auth-update', handleAuthUpdate);
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('auth-update', handleAuthUpdate);
+    };
   }, []);
 
   if (loading) return null;
@@ -39,18 +48,13 @@ export default function App() {
   const renderPage = () => {
     const hash = currentPath.split('?')[0];
     
-    // Rota de Teste de Exclusão (Acessível sem login para facilitar o teste, ou com login)
-    if (hash === '#/TestDelete') {
-        return <TestDeletionPage />;
-    }
-    
     // Se não estiver logado, vai para Login
     if (!currentUser) {
       return <LoginPage />;
     }
 
-    // Bloqueio de Segurança: Somente marconifabiano@gmail.com acessa Gestão
-    const isAdmin = currentUser.email === 'marconifabiano@gmail.com';
+    // Bloqueio de Segurança - Admin Check
+    const isAdmin = currentUser.name === 'Marconi Fabian' || currentUser.admin === true;
 
     if (hash === '#/Management') {
       return isAdmin ? <ManagementPage /> : <HomePage />;
@@ -70,7 +74,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-sky-950 font-sans antialiased text-slate-900">
+    <div className="min-h-screen bg-[#0f2441] font-sans antialiased text-slate-900 overflow-x-hidden selection:bg-sky-200">
       {renderPage()}
       <Toaster />
     </div>

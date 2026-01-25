@@ -1,26 +1,16 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DailyReport } from '../entities/DailyReport';
 import { User } from '../entities/User';
+import { EntityStorage } from '../entities/Storage';
 import { format } from "date-fns";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Badge } from "../components/ui/badge";
+import { ptBR } from "date-fns/locale/pt-BR";
 import { 
-  FileText, Search, Plus, History, Shield, Users, LogOut, Copy, Trash2, Edit2, BarChart3
+  FileText, Search, Plus, Users, BarChart3, ClipboardList, Bell, Shield, ImageIcon, UserPlus, LogOut, Camera, User as UserIcon, Settings, Wrench
 } from "lucide-react";
-import { createPageUrl } from '../utils';
+import { createPageUrl, cn } from '../utils';
 import { useToast } from "../components/ui/use-toast";
-import WhatsAppReport from '../components/reports/WhatsAppReport';
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 
 export function ReportsPage() {
   const [reports, setReports] = useState<any[]>([]);
@@ -28,27 +18,88 @@ export function ReportsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  
+  // Mapeamento de Avatares (Nome -> Foto Base64)
+  const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
+  
+  // Notification State
+  const [notifications, setNotifications] = useState<any[]>([]);
+  
   const { toast } = useToast();
+  
+  // Custom Logo State
+  const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('custom_logo'));
+
+  // Ref para input de arquivo de perfil
+  const profileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
     try {
       const userData = await User.me();
       setCurrentUser(userData);
-      setIsAdmin(userData?.admin === true);
+      const adminStatus = userData?.name === 'Marconi Fabian' || userData?.admin === true;
+      setIsAdmin(adminStatus);
+      setCustomLogo(localStorage.getItem('custom_logo'));
 
+      // Carregar Usuários para pegar os Avatares e mapear pelo NOME
+      const allUsers = EntityStorage.list<any>('AuthorizedUser');
+      const avatarMap: Record<string, string> = {};
+      allUsers.forEach(u => {
+        if (u.avatar && u.name) {
+            avatarMap[u.name] = u.avatar;
+        }
+      });
+      setUserAvatars(avatarMap);
+
+      // Carregar Relatórios
       const allReports = await DailyReport.list();
-      const visible = userData?.admin === true ? allReports : allReports.filter(r => r.created_by === userData?.email);
+      
+      // Admin vê tudo, outros veem apenas o que criaram (comparando nome)
+      const visible = adminStatus ? allReports : allReports.filter(r => r.created_by === userData?.name);
+      
       setReports(visible);
       setFilteredReports(visible);
+
+      // Carregar Notificações
+      const notifs = [];
+      
+      // Notificação para Admin: Usuários Pendentes
+      if (adminStatus) {
+         const pending = allUsers.filter(u => u.status === 'pending');
+         if (pending.length > 0) {
+            notifs.push({
+                id: 'pending-users',
+                title: 'Aprovações Pendentes',
+                description: `${pending.length} usuário(s) aguardando liberação.`,
+                type: 'action',
+                link: 'Management'
+            });
+         }
+      }
+
+      // Notificação Geral
+      notifs.push({
+         id: 'welcome',
+         title: 'Bem-vindo ao RDO Online',
+         description: 'Sistema pronto para uso.',
+         type: 'info'
+      });
+
+      setNotifications(notifs);
+
     } catch (error) {
-      console.error("Erro ao carregar relatórios:", error);
+      console.error("Erro ao carregar dados:", error);
     }
   }, []);
 
   useEffect(() => { 
     loadData();
-    window.addEventListener('storage-updated', loadData);
-    return () => window.removeEventListener('storage-updated', loadData);
+    const handleStorage = () => {
+        loadData();
+        setCustomLogo(localStorage.getItem('custom_logo'));
+    };
+    window.addEventListener('storage-updated', handleStorage);
+    return () => window.removeEventListener('storage-updated', handleStorage);
   }, [loadData]);
 
   const handleSearch = (term: string) => {
@@ -62,152 +113,323 @@ export function ReportsPage() {
     setFilteredReports(filtered);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!id) return;
-    
-    // Removido o confirm nativo para garantir execução em Mobile/PWA
-    // e fornecer feedback visual instantâneo
-    console.log(`[Reports] Solicitando exclusão do relatório ID: ${id}`);
-
-    // 1. Remove VISUALMENTE (Optimistic UI)
-    setFilteredReports(prev => prev.filter(r => r.id !== id));
-    setReports(prev => prev.filter(r => r.id !== id));
-
-    // 2. Remove do BANCO
-    try {
-      await DailyReport.delete(id);
-      toast({ title: "Excluído", description: "Relatório removido permanentemente.", variant: "default" });
-    } catch (err) {
-      console.error(err);
-      loadData(); // Restaura em caso de erro
-      toast({ title: "Erro", description: "Falha ao apagar o relatório.", variant: "destructive" });
-    }
-  };
-
   const handleLogout = () => {
     User.logout();
-    window.location.reload();
   };
 
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case "finalizada": return "bg-green-100 text-green-700 border-green-200";
-      case "em_andamento": return "bg-blue-100 text-blue-700 border-blue-200";
-      case "paralisada": return "bg-red-100 text-red-700 border-red-200";
-      default: return "bg-amber-100 text-amber-700 border-amber-200";
+  const handleProfileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+        toast({ title: "Erro", description: "A imagem deve ter no máximo 2MB.", variant: "destructive" });
+        return;
     }
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        
+        // 1. Atualizar no EntityStorage (Banco de Dados)
+        // Precisamos encontrar o ID do usuário atual
+        const allUsers = EntityStorage.list<any>('AuthorizedUser');
+        const dbUser = allUsers.find(u => u.id === currentUser.id); // Busca por ID é mais segura
+        
+        if (dbUser) {
+            await EntityStorage.update('AuthorizedUser', dbUser.id, { avatar: base64 });
+            
+            // 2. Atualizar no SessionStorage (Sessão Atual)
+            const updatedSession = { ...currentUser, avatar: base64 };
+            localStorage.setItem('currentUser', JSON.stringify(updatedSession));
+            
+            toast({ title: "Foto Atualizada", description: "Sua identidade visual foi salva." });
+            loadData();
+        }
+    };
+    reader.readAsDataURL(file);
   };
+
+  const safeFormatDate = (dateStr: string) => {
+      try {
+          if (!dateStr) return '';
+          const d = new Date(dateStr);
+          if (isNaN(d.getTime())) return '';
+          return format(d, "dd 'de' MMM", { locale: ptBR });
+      } catch {
+          return '';
+      }
+  };
+
+  // Avatar atual (usa o nome como chave no avatarMap, mas o currentUser já pode ter o avatar na sessão, mas é melhor pegar do mapa atualizado)
+  const hasPhoto = currentUser?.name ? userAvatars[currentUser.name] : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-950 via-blue-900 to-sky-950 pb-20">
-      <header className="p-6 backdrop-blur-xl bg-sky-950/40 border-b border-white/10 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between gap-4 items-center">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/10 rounded-xl">
-              <FileText className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-white uppercase tracking-tighter">Diário de Obras</h1>
-              <p className="text-sky-300 text-xs font-bold uppercase tracking-widest">Olá, {currentUser?.full_name?.split(' ')[0]}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 w-full md:w-auto">
-            <Button onClick={() => window.location.hash = createPageUrl('DailyReport')} className="bg-white text-sky-950 hover:bg-sky-50 shadow-2xl font-bold">
-              <Plus className="w-4 h-4 mr-2" /> NOVO
-            </Button>
-            <Button variant="outline" onClick={() => window.location.hash = createPageUrl('TeamTemplate')} className="border-white/20 text-white hover:bg-white/10">
-              <Users className="w-4 h-4 mr-2" /> EQUIPE
-            </Button>
-            {isAdmin && (
-              <>
-                <Button variant="outline" onClick={() => window.location.hash = createPageUrl('Analysis')} className="border-white/20 text-white hover:bg-white/10">
-                  <BarChart3 className="w-4 h-4 mr-2" /> ANÁLISE
-                </Button>
-                <Button variant="outline" onClick={() => window.location.hash = createPageUrl('Management')} className="border-white/20 text-white hover:bg-white/10">
-                  <Shield className="w-4 h-4 mr-2" /> GESTÃO
-                </Button>
-              </>
-            )}
-            <Button variant="ghost" onClick={handleLogout} className="text-red-400 hover:bg-red-400/10">
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
-        <Card className="bg-white/95 backdrop-blur-xl border-none shadow-2xl overflow-hidden">
-          <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between gap-4 bg-slate-50/50">
-            <CardTitle className="text-sky-900 flex items-center gap-2 text-sm font-black uppercase">
-              <History className="w-5 h-5" /> Histórico Recente
-            </CardTitle>
-            <div className="relative w-full md:w-72">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <Input 
-                placeholder="Buscar OM ou Local..." 
-                className="pl-9 bg-white border-none shadow-inner"
-                value={searchTerm}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-bold text-sky-900">DATA</TableHead>
-                    <TableHead className="font-bold text-sky-900">OM</TableHead>
-                    <TableHead className="font-bold text-sky-900">LOCAL</TableHead>
-                    <TableHead className="font-bold text-sky-900">STATUS</TableHead>
-                    <TableHead className="text-right font-bold text-sky-900">AÇÕES</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredReports.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-20 text-slate-400 italic">
-                        Nenhum relatório encontrado.
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredReports.map((r) => (
-                    <TableRow key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                      <TableCell className="font-bold text-slate-600">{r.date ? format(new Date(r.date), "dd/MM/yy") : '---'}</TableCell>
-                      <TableCell className="font-mono text-xs font-bold text-sky-700">{r.om_number}</TableCell>
-                      <TableCell className="max-w-[120px] truncate font-medium">{r.activity_location}</TableCell>
-                      <TableCell>
-                        <Badge className={getStatusStyle(r.status)}>
-                          {r.status?.replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <WhatsAppReport report={r} compact={true} />
-                          <Button variant="ghost" size="icon" onClick={() => window.location.hash = createPageUrl('DailyReport', { edit: r.id })}>
-                            <Edit2 className="w-4 h-4 text-blue-600" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => window.location.hash = createPageUrl('DailyReport', { copy: r.id })}>
-                            <Copy className="w-4 h-4 text-purple-600" />
-                          </Button>
-                          {(isAdmin || r.created_by === currentUser?.email) && (
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)}>
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
-                          )}
+    <div className="min-h-screen bg-[#0f2441] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] font-sans flex flex-col">
+      
+      {/* Header Area */}
+      <div className="px-6 pt-8 pb-6">
+        <div className="flex justify-between items-center mb-6 gap-2">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+                
+                {/* LOGO DA EMPRESA */}
+                <div className="bg-white p-0.5 rounded-lg h-10 w-auto px-2 flex items-center justify-center overflow-hidden shadow-md shrink-0 opacity-80">
+                    {customLogo ? (
+                        <img 
+                            src={customLogo} 
+                            alt="Logo" 
+                            className="h-full w-auto object-contain"
+                        />
+                    ) : (
+                        <div className="text-slate-200 flex flex-col items-center justify-center px-2">
+                            <ImageIcon className="w-4 h-4" />
+                            <span className="text-[6px] font-bold uppercase">Sem Logo</span>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </main>
+                    )}
+                </div>
 
-      <footer className="fixed bottom-0 w-full p-4 text-center text-sky-400 text-[10px] font-bold uppercase tracking-widest backdrop-blur-md bg-sky-950/20">
-        Desenvolvido por Marconi Fabian © 2025 | Sistema de Alta Performance
-      </footer>
+                <div className="h-8 w-px bg-white/10 mx-1 shrink-0"></div>
+                
+                {/* INFO DO USUÁRIO + UPLOAD DE FOTO */}
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <div 
+                        className="relative group cursor-pointer shrink-0"
+                        onClick={() => profileInputRef.current?.click()}
+                    >
+                        {!hasPhoto && (
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping"></span>
+                        )}
+
+                        <div className={cn(
+                            "w-16 h-16 rounded-full border-4 flex items-center justify-center overflow-hidden shadow-2xl transition-transform active:scale-95",
+                            hasPhoto ? "border-white/20 bg-sky-950" : "border-amber-400 bg-amber-500"
+                        )}>
+                            {hasPhoto ? (
+                                <img src={hasPhoto} alt="Perfil" className="w-full h-full object-cover" />
+                            ) : (
+                                <Camera className="w-8 h-8 text-white animate-pulse" />
+                            )}
+                        </div>
+
+                        <div className={cn(
+                            "absolute -bottom-1 -right-1 rounded-full p-1.5 shadow-sm border-2 border-[#0f2441] flex items-center justify-center",
+                            hasPhoto ? "bg-white text-[#0f2441]" : "bg-white text-amber-600"
+                        )}>
+                             {hasPhoto ? <Settings className="w-3 h-3" /> : <Plus className="w-4 h-4 font-black" />}
+                        </div>
+
+                        <input 
+                            type="file" 
+                            ref={profileInputRef} 
+                            className="hidden" 
+                            accept="image/*"
+                            onChange={handleProfileUpload}
+                        />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                        <p className="text-sky-400 text-[10px] font-bold uppercase tracking-wider mb-0.5">Operador</p>
+                        <h1 className="text-lg font-black text-white uppercase tracking-tight leading-none truncate">
+                            {currentUser?.full_name?.split(' ')[0]}
+                        </h1>
+                        {!hasPhoto && (
+                             <p className="text-amber-400 text-[9px] font-bold animate-pulse mt-1">Toque na foto para definir 📸</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+            
+            {/* Ícones da Direita: Notificações e Sair */}
+            <div className="flex flex-col items-end gap-3 shrink-0 ml-1">
+                
+                {/* SINO DE NOTIFICAÇÕES (CORRIGIDO PARA MOBILE) */}
+                <Popover>
+                    <PopoverTrigger>
+                        <div className="relative p-2 text-white/70 hover:text-white transition-colors cursor-pointer bg-white/5 rounded-xl hover:bg-white/10">
+                            <Bell className="w-5 h-5" />
+                            {notifications.length > 0 && (
+                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-[#0f2441]"></span>
+                            )}
+                        </div>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-[280px] sm:w-80 p-0 bg-white border-slate-200 shadow-xl rounded-xl overflow-hidden max-w-[calc(100vw-2rem)]">
+                        <div className="bg-slate-50 p-3 border-b border-slate-100 flex justify-between items-center">
+                            <span className="text-xs font-bold text-[#0f2441] uppercase">Notificações</span>
+                            <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded font-black">{notifications.length}</span>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                            {notifications.length === 0 ? (
+                                <div className="p-4 text-center text-slate-400 text-xs italic">
+                                    Nenhuma notificação.
+                                </div>
+                            ) : (
+                                notifications.map((n) => (
+                                    <div 
+                                        key={n.id} 
+                                        className={cn(
+                                            "p-3 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-default",
+                                            n.type === 'action' ? "cursor-pointer bg-blue-50/30" : ""
+                                        )}
+                                        onClick={() => {
+                                            if (n.type === 'action' && n.link) {
+                                                if (n.link === 'Management') {
+                                                    window.location.hash = '#/Management';
+                                                } else {
+                                                    window.location.hash = createPageUrl(n.link);
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            {n.id === 'pending-users' ? (
+                                                <div className="bg-amber-100 text-amber-600 p-1.5 rounded-full mt-0.5">
+                                                    <UserPlus className="w-3.5 h-3.5" />
+                                                </div>
+                                            ) : (
+                                                <div className="bg-slate-100 text-slate-500 p-1.5 rounded-full mt-0.5">
+                                                    <Bell className="w-3.5 h-3.5" />
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-xs font-bold text-slate-800">{n.title}</h4>
+                                                <p className="text-[10px] text-slate-500 leading-tight mt-0.5">{n.description}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </PopoverContent>
+                </Popover>
+
+                {/* BOTÃO SAIR */}
+                <button 
+                    onClick={handleLogout}
+                    className="p-2 text-red-300 hover:text-red-100 transition-colors bg-red-500/10 hover:bg-red-500/20 rounded-xl"
+                >
+                    <LogOut className="w-5 h-5" />
+                </button>
+            </div>
+
+        </div>
+
+        {/* Action Buttons Grid */}
+        <div className="grid grid-cols-2 gap-3 pb-2">
+            <button 
+                onClick={() => window.location.hash = createPageUrl('DailyReport')}
+                className="flex items-center justify-center gap-2 bg-white text-[#0f2441] px-4 py-3 rounded-xl text-xs font-black uppercase shadow-lg active:scale-95 transition-transform w-full"
+            >
+                <Plus className="w-4 h-4" /> Novo
+            </button>
+            <button 
+                onClick={() => window.location.hash = createPageUrl('TeamTemplate')}
+                className="flex items-center justify-center gap-2 bg-[#1e3a5f] text-white border border-white/10 px-4 py-3 rounded-xl text-xs font-bold uppercase hover:bg-[#2d4b75] active:scale-95 transition-all w-full"
+            >
+                <Users className="w-4 h-4 text-sky-300" /> Equipe
+            </button>
+            {isAdmin && (
+                <>
+                    <button 
+                        onClick={() => window.location.hash = createPageUrl('Analysis')}
+                        className="flex items-center justify-center gap-2 bg-[#1e3a5f] text-white border border-white/10 px-4 py-3 rounded-xl text-xs font-bold uppercase hover:bg-[#2d4b75] active:scale-95 transition-all w-full"
+                    >
+                        <BarChart3 className="w-4 h-4 text-sky-300" /> Análise
+                    </button>
+                    <button 
+                        onClick={() => window.location.hash = createPageUrl('Management')}
+                        className="flex items-center justify-center gap-2 bg-[#1e3a5f] text-white border border-white/10 px-4 py-3 rounded-xl text-xs font-bold uppercase hover:bg-[#2d4b75] active:scale-95 transition-all w-full"
+                    >
+                        <Shield className="w-4 h-4 text-sky-300" /> Gestão
+                    </button>
+                </>
+            )}
+        </div>
+      </div>
+
+      {/* Main Content Sheet */}
+      <div className="flex-1 bg-white rounded-t-[32px] overflow-hidden flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.2)]">
+        
+        {/* Search & Header */}
+        <div className="px-6 pt-6 pb-2">
+            <div className="flex items-center gap-2 text-[#0f2441] mb-4">
+                <HistoryIcon className="w-5 h-5 text-sky-600" />
+                <h2 className="text-sm font-black uppercase tracking-wide">Histórico Recente</h2>
+            </div>
+            
+            <div className="relative">
+                <Search className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+                <input 
+                    placeholder="Buscar OM, Projeto ou Local..." 
+                    className="w-full h-12 bg-slate-100 rounded-2xl pl-12 pr-4 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 transition-all"
+                    value={searchTerm}
+                    onChange={(e) => handleSearch(e.target.value)}
+                />
+            </div>
+            
+            <div className="flex justify-between items-center mt-6 mb-2 px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <span className="w-20">Data</span>
+                <span className="flex-1 text-center">OM/Projeto</span>
+                <span className="w-20 text-right">Local</span>
+                <span className="w-20 text-right">Status</span>
+            </div>
+        </div>
+
+        {/* List Content */}
+        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+            {filteredReports.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 opacity-40">
+                    <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                        <ClipboardList className="w-10 h-10 text-slate-300" />
+                    </div>
+                    <p className="text-slate-400 font-bold text-sm italic">Nenhum relatório encontrado.</p>
+                    <p className="text-slate-300 text-xs mt-1 text-center max-w-[200px]">Utilize o botão "Novo" acima para registrar sua primeira obra hoje.</p>
+                </div>
+            ) : (
+                filteredReports.map((report) => (
+                    <div 
+                        key={report.id}
+                        onClick={() => window.location.hash = createPageUrl('DailyReport', { edit: report.id })}
+                        className="bg-white border border-slate-100 rounded-2xl p-3 flex items-center justify-between hover:shadow-md hover:border-sky-100 transition-all cursor-pointer group"
+                    >
+                        <div className="mr-3 shrink-0">
+                             <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
+                                {report.created_by && userAvatars[report.created_by] ? (
+                                    <img src={userAvatars[report.created_by]} alt="User" className="w-full h-full object-cover" />
+                                ) : (
+                                    <UserIcon className="w-4 h-4 text-slate-300" />
+                                )}
+                             </div>
+                        </div>
+
+                        <div className="w-16">
+                            <span className="text-[10px] font-bold text-slate-700 block">{safeFormatDate(report.date).split(' de ')[0]}</span>
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">{safeFormatDate(report.date).split(' de ')[1]}</span>
+                        </div>
+
+                        <div className="flex-1 text-center px-2">
+                            <span className="text-xs font-black text-[#0f2441] tracking-tight truncate block">{report.om_number}</span>
+                        </div>
+
+                        <div className="w-20 text-right">
+                             <span className="text-[9px] font-bold text-slate-500 truncate block max-w-full">{report.activity_location || '-'}</span>
+                        </div>
+                        
+                        <div className="w-10 flex justify-end">
+                            <span className={cn("w-2 h-2 rounded-full", 
+                                report.status === 'finalizada' ? 'bg-green-500' : 
+                                report.status === 'paralisada' ? 'bg-red-500' : 'bg-blue-500'
+                            )}></span>
+                        </div>
+                    </div>
+                ))
+            )}
+        </div>
+
+      </div>
     </div>
   );
 }
+
+// Icon helper
+const HistoryIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12" /><path d="M3 3v9h9" /><path d="M12 7v5l4 2" /></svg>
+);

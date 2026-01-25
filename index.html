@@ -4,19 +4,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-    <title>Diário de Obras Porto</title>
+    <title>RDO Online</title>
     
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="./manifest.json">
+
     <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="Diário de Obras Porto">
+    <meta name="apple-mobile-web-app-title" content="RDO Online">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="application-name" content="Diário de Obras Porto">
-    <meta name="theme-color" content="#0c4a6e">
+    <meta name="application-name" content="RDO Online">
+    <meta name="theme-color" content="#0f2441">
     
     <!-- Icons -->
-    <link rel="apple-touch-icon" href="https://picsum.photos/192/192?text=DO">
-    <link rel="icon" type="image/png" sizes="192x192" href="https://picsum.photos/192/192?text=DO">
+    <link rel="apple-touch-icon" href="https://picsum.photos/192/192?text=RDO">
+    <link rel="icon" type="image/png" sizes="192x192" href="https://picsum.photos/192/192?text=RDO">
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -54,5 +57,18 @@
 </head>
 <body class="bg-slate-50 text-slate-900 overflow-x-hidden">
     <div id="root"></div>
+
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('./service-worker.js').then(function(registration) {
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+          }, function(err) {
+            console.log('ServiceWorker registration failed: ', err);
+          });
+        });
+      }
+    </script>
 </body>
 </html>

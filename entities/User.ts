@@ -15,27 +15,34 @@ export class User {
     return null;
   }
 
-  static async login(email: string, password: string): Promise<{ success: boolean; message: string; user?: any }> {
+  static async login(name: string, password: string): Promise<{ success: boolean; message: string; user?: any }> {
     const users = EntityStorage.list<any>('AuthorizedUser');
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+    // Busca por Nome (case insensitive) e Senha
+    const user = users.find(u => u.name.trim().toLowerCase() === name.trim().toLowerCase() && u.password === password);
 
     if (!user) {
-      return { success: false, message: "E-mail ou senha incorretos." };
+      return { success: false, message: "Nome ou senha incorretos." };
     }
 
-    if (user.status === 'pending' && user.email !== 'marconifabiano@gmail.com') {
+    // Verifica status (Marconi Fabian sempre passa)
+    const isAdmin = user.name === 'Marconi Fabian';
+
+    if (user.status === 'pending' && !isAdmin) {
       return { success: false, message: "Seu acesso ainda está aguardando liberação pelo gestor." };
     }
 
-    if (user.active === false && user.email !== 'marconifabiano@gmail.com') {
+    if (user.active === false && !isAdmin) {
       return { success: false, message: "Seu acesso foi desativado." };
     }
 
     const sessionUser = {
-      email: user.email.toLowerCase(),
+      id: user.id,
+      email: user.email || 'no-email', // Mantendo propriedade legada
+      name: user.name, // Primary ID now
       full_name: user.name,
       registration: user.registration,
-      admin: user.email.toLowerCase() === 'marconifabiano@gmail.com'
+      admin: isAdmin || user.admin === true,
+      avatar: user.avatar
     };
 
     localStorage.setItem('currentUser', JSON.stringify(sessionUser));
@@ -44,12 +51,21 @@ export class User {
 
   static async register(data: any): Promise<{ success: boolean; message: string }> {
     const users = EntityStorage.list<any>('AuthorizedUser');
-    if (users.find(u => u.email.toLowerCase() === data.email.toLowerCase())) {
-      return { success: false, message: "Este e-mail já está cadastrado." };
+    
+    // Verifica se já existe alguém com esse nome
+    if (users.find(u => u.name.trim().toLowerCase() === data.name.trim().toLowerCase())) {
+      return { success: false, message: "Este nome já está cadastrado." };
+    }
+
+    // Verifica se já existe a matrícula (opcional, mas recomendado)
+    if (users.find(u => u.registration === data.registration)) {
+       // return { success: false, message: "Esta matrícula já está cadastrada." };
+       // Permitir duplicata de matricula por enquanto caso mudem de turno, etc, mas o nome deve ser unico
     }
 
     EntityStorage.create('AuthorizedUser', {
       ...data,
+      email: `${data.name.replace(/\s+/g, '.').toLowerCase()}@rdo.user`, // Gera email interno dummy
       access_level: 'viewer',
       status: 'pending',
       active: false
