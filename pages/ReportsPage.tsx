@@ -8,7 +8,7 @@ import { ptBR } from "date-fns/locale/pt-BR";
 import { 
   FileText, Search, Plus, Users, BarChart3, ClipboardList, Bell, Shield, ImageIcon, UserPlus, LogOut, Camera, User as UserIcon, Settings, Wrench
 } from "lucide-react";
-import { createPageUrl, cn } from '../utils';
+import { createPageUrl, cn, SYSTEM_CONFIG } from '../utils';
 import { useToast } from "../components/ui/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 
@@ -163,6 +163,9 @@ export function ReportsPage() {
   // Avatar atual (usa o nome como chave no avatarMap, mas o currentUser já pode ter o avatar na sessão, mas é melhor pegar do mapa atualizado)
   const hasPhoto = currentUser?.name ? userAvatars[currentUser.name] : null;
 
+  // Decide qual logo exibir
+  const displayLogo = customLogo || SYSTEM_CONFIG.defaultLogo;
+
   return (
     <div className="min-h-screen bg-[#0f2441] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] font-sans flex flex-col">
       
@@ -172,19 +175,12 @@ export function ReportsPage() {
             <div className="flex items-center gap-3 flex-1 min-w-0">
                 
                 {/* LOGO DA EMPRESA */}
-                <div className="bg-white p-0.5 rounded-lg h-10 w-auto px-2 flex items-center justify-center overflow-hidden shadow-md shrink-0 opacity-80">
-                    {customLogo ? (
-                        <img 
-                            src={customLogo} 
-                            alt="Logo" 
-                            className="h-full w-auto object-contain"
-                        />
-                    ) : (
-                        <div className="text-slate-200 flex flex-col items-center justify-center px-2">
-                            <ImageIcon className="w-4 h-4" />
-                            <span className="text-[6px] font-bold uppercase">Sem Logo</span>
-                        </div>
-                    )}
+                <div className="bg-white p-1 rounded-lg h-12 w-auto px-3 flex items-center justify-center overflow-hidden shadow-md shrink-0 opacity-90">
+                    <img 
+                        src={displayLogo} 
+                        alt="Logo" 
+                        className="h-full w-auto object-contain"
+                    />
                 </div>
 
                 <div className="h-8 w-px bg-white/10 mx-1 shrink-0"></div>
@@ -227,7 +223,7 @@ export function ReportsPage() {
                     </div>
 
                     <div className="min-w-0 flex-1">
-                        <p className="text-sky-400 text-[10px] font-bold uppercase tracking-wider mb-0.5">Operador</p>
+                        <p className="text-sky-400 text-[10px] font-bold uppercase tracking-wider mb-0.5">{isAdmin ? "Administrador" : "Operador"}</p>
                         <h1 className="text-lg font-black text-white uppercase tracking-tight leading-none truncate">
                             {currentUser?.full_name?.split(' ')[0]}
                         </h1>

@@ -15,3 +15,11 @@ export const getQueryParams = () => {
   if (index === -1) return new URLSearchParams();
   return new URLSearchParams(hash.substring(index));
 };
+
+// Configurações Globais do Sistema
+export const SYSTEM_CONFIG = {
+  // Substitua este link pelo link direto da logo da sua empresa hospedada na internet (Imgur, site da empresa, etc)
+  // Usei um ícone genérico de construção como padrão profissional.
+  defaultLogo: "https://cdn-icons-png.flaticon.com/512/3063/3063823.png",
+  appName: "RDO Online"
+};

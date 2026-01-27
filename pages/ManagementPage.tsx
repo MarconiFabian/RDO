@@ -8,7 +8,7 @@ import {
   Power, PowerOff, Download, Plus,
   Database, ImageIcon, Upload, RefreshCcw, User as UserIcon
 } from 'lucide-react';
-import { createPageUrl, cn } from '../utils';
+import { createPageUrl, cn, SYSTEM_CONFIG } from '../utils';
 import { useToast } from '../components/ui/use-toast';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
@@ -83,7 +83,7 @@ export function ManagementPage() {
         const base64 = reader.result as string;
         localStorage.setItem('custom_logo', base64);
         setCustomLogo(base64);
-        toast({ title: "Logomarca Atualizada", description: "A nova logo foi aplicada em todo o sistema." });
+        toast({ title: "Logo Local Atualizada", description: "Esta logo substitui o padrão apenas neste dispositivo." });
         window.dispatchEvent(new Event('storage-updated'));
       };
       reader.readAsDataURL(file);
@@ -92,10 +92,10 @@ export function ManagementPage() {
 
   // Função para Resetar Logo
   const handleResetLogo = () => {
-    if (window.confirm("Deseja remover a logo atual e voltar ao padrão?")) {
+    if (window.confirm("Deseja remover a logo personalizada deste dispositivo? O sistema voltará a usar o link padrão.")) {
         localStorage.removeItem('custom_logo');
         setCustomLogo(null);
-        toast({ title: "Logo Removida", description: "O sistema voltou a usar o ícone padrão." });
+        toast({ title: "Logo Restaurada", description: "Usando padrão global." });
         window.dispatchEvent(new Event('storage-updated'));
     }
   };
@@ -186,6 +186,9 @@ export function ManagementPage() {
 
   if (!isAuthorized) return null;
 
+  // Decide qual logo mostrar no preview
+  const displayLogo = customLogo || SYSTEM_CONFIG.defaultLogo;
+
   return (
     <div className="min-h-screen bg-[#0f2441] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] pb-10 font-sans">
       
@@ -246,18 +249,16 @@ export function ManagementPage() {
                  </div>
                  <div>
                      <h3 className="text-xs font-black text-[#0f2441] uppercase">Identidade Visual</h3>
-                     <p className="text-[10px] text-slate-400 font-medium leading-tight">Envie sua logo para usar no app.</p>
+                     <p className="text-[10px] text-slate-400 font-medium leading-tight">
+                        {customLogo ? "Usando logo personalizada local." : "Usando logo padrão global do sistema."}
+                     </p>
                  </div>
             </div>
             
             <div className="flex items-center gap-3 w-full md:w-auto">
                  {/* Preview Area */}
                  <div className="h-12 w-28 border border-slate-200 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden relative shrink-0">
-                     {customLogo ? (
-                         <img src={customLogo} alt="Logo Atual" className="h-full w-full object-contain p-1" />
-                     ) : (
-                         <span className="text-[9px] text-slate-300 font-bold uppercase">Padrão</span>
-                     )}
+                     <img src={displayLogo} alt="Logo Atual" className="h-full w-full object-contain p-1" />
                  </div>
 
                  {/* Hidden Input */}
@@ -274,7 +275,7 @@ export function ManagementPage() {
                      <button 
                         onClick={() => fileInputRef.current?.click()}
                         className="bg-[#0f3460] hover:bg-[#0f2441] text-white rounded-xl px-3 py-2 flex items-center justify-center transition-colors shadow-lg shadow-blue-900/10"
-                        title="Enviar Logo"
+                        title="Substituir neste dispositivo"
                      >
                         <Upload className="w-4 h-4" />
                      </button>

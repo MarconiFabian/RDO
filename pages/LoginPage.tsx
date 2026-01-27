@@ -6,14 +6,14 @@ import { Label } from '../components/ui/label';
 import { User } from '../entities/User';
 import { useToast } from '../components/ui/use-toast';
 import { Loader2, ImageIcon, User as UserIcon, Lock, Hash } from 'lucide-react';
-import { cn } from '../utils';
+import { cn, SYSTEM_CONFIG } from '../utils';
 
 export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   
-  // Custom Logo State (Read Only)
+  // Custom Logo State: Tenta pegar local, senão usa a Global
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('custom_logo'));
 
   // Login State
@@ -33,6 +33,9 @@ export function LoginPage() {
     window.addEventListener('storage-updated', handleStorage);
     return () => window.removeEventListener('storage-updated', handleStorage);
   }, []);
+
+  // Define qual logo mostrar: A customizada local (se houver) ou a Padrão do Sistema
+  const displayLogo = customLogo || SYSTEM_CONFIG.defaultLogo;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,22 +104,19 @@ export function LoginPage() {
       {/* Logo Area */}
       <div className="flex flex-col items-center mb-2 animate-in fade-in zoom-in duration-500 text-center z-10 relative">
         
-        {/* LOCAL PARA INSERIR A FOTO DA EMPRESA (Visualização Apenas) */}
+        {/* LOGO DA EMPRESA */}
         <div 
-            className="bg-white p-2 rounded-2xl mb-2 shadow-2xl ring-4 ring-white/10 h-24 w-auto px-4 flex items-center justify-center overflow-hidden relative"
+            className="bg-white p-2 rounded-2xl mb-2 shadow-2xl ring-4 ring-white/10 h-28 w-auto px-6 flex items-center justify-center overflow-hidden relative"
         >
-            {customLogo ? (
-                <img 
-                    src={customLogo} 
-                    alt="Logo Empresa" 
-                    className="h-full w-auto object-contain"
-                />
-            ) : (
-                <div className="flex flex-col items-center text-slate-300">
-                    <ImageIcon className="w-8 h-8 mb-1" />
-                    <span className="text-[10px] font-bold uppercase">RDO Online</span>
-                </div>
-            )}
+            <img 
+                src={displayLogo} 
+                alt="Logo Empresa" 
+                className="h-full w-auto object-contain"
+                onError={(e) => {
+                  // Fallback se a imagem quebrar
+                  e.currentTarget.style.display = 'none';
+                }}
+            />
         </div>
 
         <h1 className="text-2xl font-black text-white tracking-tight uppercase">RDO Online</h1>
