@@ -4,12 +4,12 @@
   "name": "RDO Online - Gestão de Obras",
   "icons": [
     {
-      "src": "https://picsum.photos/192/192?text=RDO",
+      "src": "https://cdn-icons-png.flaticon.com/512/3063/3063823.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "https://picsum.photos/512/512?text=RDO",
+      "src": "https://cdn-icons-png.flaticon.com/512/3063/3063823.png",
       "type": "image/png",
       "sizes": "512x512"
     }
