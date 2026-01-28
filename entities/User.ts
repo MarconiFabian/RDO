@@ -118,8 +118,15 @@ export class User {
         return { success: true, message: "Cadastro enviado! Aguarde a liberação do seu gestor." };
     } catch (error: any) {
         console.error("Erro no registro:", error);
-        // Retorna a mensagem técnica se houver, ajuda no debug
-        return { success: false, message: `Erro ao salvar: ${error.message || "Tente novamente."}` };
+        
+        let msg = error.message || "Tente novamente.";
+        
+        // Tradução amigável do erro de RLS do Supabase
+        if (msg.includes("row-level security")) {
+            msg = "Permissão negada pelo Banco de Dados. O administrador precisa rodar o script de Policy no Supabase SQL Editor.";
+        }
+        
+        return { success: false, message: msg };
     }
   }
 
