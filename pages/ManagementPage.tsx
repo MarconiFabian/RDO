@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { 
   Shield, Trash2, ArrowLeft, Users, Wrench, List, Package, FileText, 
   Power, PowerOff, Download, Plus,
-  Database, ImageIcon, Upload, RefreshCcw, User as UserIcon
+  Database, ImageIcon, Upload, RefreshCcw, User as UserIcon, ShieldAlert
 } from 'lucide-react';
 import { createPageUrl, cn, SYSTEM_CONFIG } from '../utils';
 import { useToast } from '../components/ui/use-toast';
@@ -140,7 +140,21 @@ export function ManagementPage() {
     // Otimistic
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus, active: newStatus === 'active' } : u));
     await EntityStorage.update('AuthorizedUser', user.id, { status: newStatus, active: newStatus === 'active' });
-    toast({ title: "Status Atualizado" });
+    toast({ title: "Status Atualizado", description: `Usuário ${newStatus === 'active' ? 'ativado' : 'bloqueado'}.` });
+  };
+
+  const handleToggleAdmin = async (user: any) => {
+    if (user.name === 'Marconi Fabian') return;
+    const newAdminStatus = !user.admin;
+    
+    // Otimistic update
+    setDataList(prev => prev.map(u => u.id === user.id ? { ...u, admin: newAdminStatus } : u));
+    
+    await EntityStorage.update('AuthorizedUser', user.id, { admin: newAdminStatus });
+    toast({ 
+        title: newAdminStatus ? "Novo Administrador" : "Administrador Removido", 
+        description: `O usuário ${user.name} ${newAdminStatus ? 'agora é admin' : 'agora é usuário comum'}.`
+    });
   };
 
   const safeFormatDate = (dateString: any) => {
@@ -173,7 +187,8 @@ export function ManagementPage() {
       exportData = dataList.map(item => ({
         "Nome": item.name,
         "Matrícula": item.registration,
-        "Status": item.status
+        "Status": item.status,
+        "Admin": item.admin ? "Sim" : "Não"
       }));
     } else {
       exportData = dataList.map(item => ({ "ID": item.id, "Nome": item.name }));
@@ -368,18 +383,37 @@ export function ManagementPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                            {/* Botões de Ação para Usuários */}
                             {activeTab === 'users' && item.name !== 'Marconi Fabian' && (
-                                <button 
-                                    onClick={() => handleToggleUser(item)}
-                                    className={cn(
-                                        "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                                        item.status === 'active' 
-                                            ? "bg-green-100 text-green-600 hover:bg-green-200" 
-                                            : "bg-amber-100 text-amber-600 hover:bg-amber-200"
-                                    )}
-                                >
-                                    {item.status === 'active' ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
-                                </button>
+                                <>
+                                    {/* Botão Tornar Admin */}
+                                    <button
+                                        onClick={() => handleToggleAdmin(item)}
+                                        className={cn(
+                                            "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                            item.admin
+                                                ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                                                : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                                        )}
+                                        title={item.admin ? "Remover Admin" : "Tornar Admin"}
+                                    >
+                                        <Shield className="w-4 h-4" />
+                                    </button>
+
+                                    {/* Botão Ativar/Bloquear */}
+                                    <button 
+                                        onClick={() => handleToggleUser(item)}
+                                        className={cn(
+                                            "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                            item.status === 'active' 
+                                                ? "bg-green-100 text-green-600 hover:bg-green-200" 
+                                                : "bg-amber-100 text-amber-600 hover:bg-amber-200"
+                                        )}
+                                        title={item.status === 'active' ? "Bloquear" : "Ativar"}
+                                    >
+                                        {item.status === 'active' ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+                                    </button>
+                                </>
                             )}
                             
                             <button 
