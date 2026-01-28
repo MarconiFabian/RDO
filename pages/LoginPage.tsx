@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { User } from '../entities/User';
 import { EntityStorage } from '../entities/Storage';
+import { GlobalSettings } from '../entities/GlobalSettings';
 import { useToast } from '../components/ui/use-toast';
 import { Loader2, ImageIcon, User as UserIcon, Lock, Hash, Wifi, WifiOff } from 'lucide-react';
 import { cn, SYSTEM_CONFIG } from '../utils';
@@ -27,9 +28,20 @@ export function LoginPage() {
   const [regPass, setRegPass] = useState('');
   const [regRegistration, setRegRegistration] = useState('');
 
-  // Escuta atualizações de storage caso o admin mude a logo em outra aba
+  // Escuta atualizações e carrega logo da nuvem
   useEffect(() => {
     setIsOnline(EntityStorage.isOnline());
+    
+    // Tenta buscar logo atualizada do servidor
+    const fetchGlobalLogo = async () => {
+        const logo = await GlobalSettings.getLogo();
+        if (logo) {
+            localStorage.setItem('custom_logo', logo);
+            setCustomLogo(logo);
+        }
+    };
+    fetchGlobalLogo();
+
     const handleStorage = () => {
         setCustomLogo(localStorage.getItem('custom_logo'));
         setIsOnline(EntityStorage.isOnline());

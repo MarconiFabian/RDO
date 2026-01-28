@@ -2,11 +2,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { EntityStorage } from '../entities/Storage';
 import { User } from '../entities/User';
+import { GlobalSettings } from '../entities/GlobalSettings';
 import { Button } from '../components/ui/button';
 import { 
   Shield, Trash2, ArrowLeft, Users, Wrench, List, Package, FileText, 
   Power, PowerOff, Download, Plus,
-  Database, ImageIcon, Upload, RefreshCcw, User as UserIcon, ShieldAlert
+  Database, ImageIcon, Upload, RefreshCcw, User as UserIcon, ShieldAlert, Cloud
 } from 'lucide-react';
 import { createPageUrl, cn, SYSTEM_CONFIG } from '../utils';
 import { useToast } from '../components/ui/use-toast';
@@ -18,6 +19,7 @@ export function ManagementPage() {
   const [dataList, setDataList] = useState<any[]>([]);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [savingLogo, setSavingLogo] = useState(false);
   
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('custom_logo'));
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,10 +59,17 @@ export function ManagementPage() {
     setIsAuthorized(true);
 
     const entity = getEntityName(activeTab);
-    // AGORA COM AWAIT
     const items = await EntityStorage.list<any>(entity);
     setDataList(items);
     setLoadingData(false);
+    
+    // Sync da Logo Global
+    const globalLogo = await GlobalSettings.getLogo();
+    if (globalLogo) {
+        localStorage.setItem('custom_logo', globalLogo);
+        setCustomLogo(globalLogo);
+    }
+
   }, [activeTab]);
 
   useEffect(() => {
@@ -81,30 +90,43 @@ export function ManagementPage() {
          return;
       }
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         const base64 = reader.result as string;
-        localStorage.setItem('custom_logo', base64);
-        setCustomLogo(base64);
-        toast({ title: "Logo Local Atualizada", description: "Esta logo substitui o padrão apenas neste dispositivo." });
-        window.dispatchEvent(new Event('storage-updated'));
+        setSavingLogo(true);
+        try {
+            await GlobalSettings.setLogo(base64);
+            setCustomLogo(base64);
+            toast({ title: "Logo Atualizada", description: "A nova logo está disponível para todos os usuários." });
+            window.dispatchEvent(new Event('storage-updated'));
+        } catch (e) {
+            toast({ title: "Erro", description: "Falha ao salvar logo na nuvem. Verifique o banco de dados.", variant: "destructive" });
+        } finally {
+            setSavingLogo(false);
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleResetLogo = () => {
-    if (window.confirm("Deseja remover a logo personalizada deste dispositivo? O sistema voltará a usar o link padrão.")) {
-        localStorage.removeItem('custom_logo');
-        setCustomLogo(null);
-        toast({ title: "Logo Restaurada", description: "Usando padrão global." });
-        window.dispatchEvent(new Event('storage-updated'));
+  const handleResetLogo = async () => {
+    if (window.confirm("Isso removerá a logo personalizada para TODOS os usuários. O sistema voltará a usar o link padrão. Continuar?")) {
+        setSavingLogo(true);
+        try {
+            await GlobalSettings.removeLogo();
+            setCustomLogo(null);
+            toast({ title: "Logo Restaurada", description: "Usando padrão global." });
+            window.dispatchEvent(new Event('storage-updated'));
+        } catch (e) {
+            toast({ title: "Erro", description: "Falha ao remover logo.", variant: "destructive" });
+        } finally {
+            setSavingLogo(false);
+        }
     }
   };
 
   const handleExcluir = async (id: string, nome: string) => {
     if (!id) return;
     try {
-      // Otimistic update
       setDataList(current => current.filter(item => item.id !== id));
       const entity = getEntityName(activeTab);
       await EntityStorage.delete(entity, id);
@@ -137,7 +159,6 @@ export function ManagementPage() {
   const handleToggleUser = async (user: any) => {
     if (user.name === 'Marconi Fabian') return; 
     const newStatus = user.status === 'active' ? 'blocked' : 'active';
-    // Otimistic
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus, active: newStatus === 'active' } : u));
     await EntityStorage.update('AuthorizedUser', user.id, { status: newStatus, active: newStatus === 'active' });
     toast({ title: "Status Atualizado", description: `Usuário ${newStatus === 'active' ? 'ativado' : 'bloqueado'}.` });
@@ -146,10 +167,7 @@ export function ManagementPage() {
   const handleToggleAdmin = async (user: any) => {
     if (user.name === 'Marconi Fabian') return;
     const newAdminStatus = !user.admin;
-    
-    // Otimistic update
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, admin: newAdminStatus } : u));
-    
     await EntityStorage.update('AuthorizedUser', user.id, { admin: newAdminStatus });
     toast({ 
         title: newAdminStatus ? "Novo Administrador" : "Administrador Removido", 
@@ -258,9 +276,12 @@ export function ManagementPage() {
                      <ImageIcon className="w-6 h-6 text-sky-600" />
                  </div>
                  <div>
-                     <h3 className="text-xs font-black text-[#0f2441] uppercase">Identidade Visual</h3>
+                     <h3 className="text-xs font-black text-[#0f2441] uppercase flex items-center gap-1">
+                        Identidade Global
+                        <Cloud className="w-3 h-3 text-sky-400" />
+                     </h3>
                      <p className="text-[10px] text-slate-400 font-medium leading-tight">
-                        {customLogo ? "Usando logo personalizada local." : "Usando logo padrão global do sistema."}
+                        {customLogo ? "Logo definida via Nuvem." : "Logo padrão do sistema."}
                      </p>
                  </div>
             </div>
@@ -268,6 +289,11 @@ export function ManagementPage() {
             <div className="flex items-center gap-3 w-full md:w-auto">
                  <div className="h-12 w-28 border border-slate-200 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden relative shrink-0">
                      <img src={displayLogo} alt="Logo Atual" className="h-full w-full object-contain p-1" />
+                     {savingLogo && (
+                        <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                            <div className="w-4 h-4 border-2 border-sky-600 border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                     )}
                  </div>
 
                  <input 
@@ -281,8 +307,9 @@ export function ManagementPage() {
                  <div className="flex gap-2">
                      <button 
                         onClick={() => fileInputRef.current?.click()}
-                        className="bg-[#0f3460] hover:bg-[#0f2441] text-white rounded-xl px-3 py-2 flex items-center justify-center transition-colors shadow-lg shadow-blue-900/10"
-                        title="Substituir neste dispositivo"
+                        disabled={savingLogo}
+                        className="bg-[#0f3460] hover:bg-[#0f2441] text-white rounded-xl px-3 py-2 flex items-center justify-center transition-colors shadow-lg shadow-blue-900/10 disabled:opacity-50"
+                        title="Substituir para TODOS"
                      >
                         <Upload className="w-4 h-4" />
                      </button>
@@ -290,8 +317,9 @@ export function ManagementPage() {
                      {customLogo && (
                          <button 
                             onClick={handleResetLogo}
-                            className="bg-red-50 hover:bg-red-100 text-red-500 rounded-xl px-3 py-2 flex items-center justify-center transition-colors"
-                            title="Restaurar Padrão"
+                            disabled={savingLogo}
+                            className="bg-red-50 hover:bg-red-100 text-red-500 rounded-xl px-3 py-2 flex items-center justify-center transition-colors disabled:opacity-50"
+                            title="Restaurar Padrão Global"
                          >
                             <Trash2 className="w-4 h-4" />
                          </button>

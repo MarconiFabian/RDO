@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DailyReport } from '../entities/DailyReport';
 import { User } from '../entities/User';
 import { EntityStorage } from '../entities/Storage';
+import { GlobalSettings } from '../entities/GlobalSettings';
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
 import { 
@@ -37,7 +38,15 @@ export function ReportsPage() {
       setCurrentUser(userData);
       const adminStatus = userData?.name === 'Marconi Fabian' || userData?.admin === true;
       setIsAdmin(adminStatus);
-      setCustomLogo(localStorage.getItem('custom_logo'));
+      
+      // Sincroniza logo global
+      const globalLogo = await GlobalSettings.getLogo();
+      if (globalLogo) {
+        localStorage.setItem('custom_logo', globalLogo);
+        setCustomLogo(globalLogo);
+      } else {
+        setCustomLogo(localStorage.getItem('custom_logo'));
+      }
 
       // Agora Async
       const allUsers = await EntityStorage.list<any>('AuthorizedUser');

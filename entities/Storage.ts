@@ -29,7 +29,8 @@ const TABLE_MAP: Record<string, string> = {
   'JobFunction': 'job_functions',
   'TeamTemplate': 'team_templates',
   'MaintenanceStandard': 'maintenance_standards',
-  'EquipmentCatalog': 'equipment_catalog'
+  'EquipmentCatalog': 'equipment_catalog',
+  'GlobalSettings': 'global_settings'
 };
 
 export class EntityStorage {
