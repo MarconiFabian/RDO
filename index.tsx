@@ -4,51 +4,65 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { EntityStorage } from './entities/Storage';
 
-// Função para garantir que o Admin sempre tenha acesso
-const ensureAdminAccess = () => {
-  const users = EntityStorage.list<any>('AuthorizedUser');
-  const adminName = "Marconi Fabian";
+// Função para garantir que os administradores sempre tenham acesso (Async)
+const ensureSystemAccess = async () => {
+  // Agora usamos await
+  const users = await EntityStorage.list<any>('AuthorizedUser');
   
-  // Procura pelo nome exato
-  const adminUser = users.find(u => u.name === adminName);
-  
-  if (!adminUser) {
-    // Se não existir, cria
-    EntityStorage.create('AuthorizedUser', { 
-      email: "admin@rdo.sys", // Placeholder interno
-      name: adminName, 
-      password: "admin", 
+  const systemUsers = [
+    {
+      name: "Marconi Fabian",
       registration: "001",
-      active: true, 
-      status: 'active',
-      access_level: 'admin',
-      admin: true
-    });
-    console.log("[System] Admin user restored.");
-  } else {
-    // Se existir, garante que está ativo e com status de admin
-    let modified = false;
-    const updates: any = {};
-
-    if (!adminUser.active || adminUser.status !== 'active') {
-      updates.active = true;
-      updates.status = 'active';
-      modified = true;
+      password: "admin",
+      isAdmin: true
+    },
+    {
+      name: "Alexsandro Gabriel",
+      registration: "002",
+      password: "admin",
+      isAdmin: true
     }
-    if (!adminUser.admin) {
-        updates.admin = true;
+  ];
+
+  for (const sysUser of systemUsers) {
+    const existingUser = users.find(u => u.name === sysUser.name);
+    
+    if (!existingUser) {
+      await EntityStorage.create('AuthorizedUser', { 
+        email: `${sysUser.name.split(' ')[0].toLowerCase()}@rdo.sys`,
+        name: sysUser.name, 
+        password: sysUser.password, 
+        registration: sysUser.registration,
+        active: true, 
+        status: 'active',
+        access_level: 'admin',
+        admin: sysUser.isAdmin
+      });
+      console.log(`[System] User ${sysUser.name} created automatically.`);
+    } else {
+      let modified = false;
+      const updates: any = {};
+
+      if (!existingUser.active || existingUser.status !== 'active') {
+        updates.active = true;
+        updates.status = 'active';
         modified = true;
-    }
+      }
+      if (sysUser.isAdmin && !existingUser.admin) {
+          updates.admin = true;
+          modified = true;
+      }
 
-    if (modified) {
-        EntityStorage.update('AuthorizedUser', adminUser.id, updates);
-        console.log("[System] Admin user properties updated.");
+      if (modified) {
+          await EntityStorage.update('AuthorizedUser', existingUser.id, updates);
+          console.log(`[System] User ${sysUser.name} permissions updated.`);
+      }
     }
   }
 };
 
-// Executa verificação ao iniciar
-ensureAdminAccess();
+// Executa verificação ao iniciar (sem bloquear renderização inicial, roda em background)
+ensureSystemAccess();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error("Root element not found");

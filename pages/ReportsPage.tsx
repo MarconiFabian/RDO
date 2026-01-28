@@ -18,31 +18,29 @@ export function ReportsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   
-  // Mapeamento de Avatares (Nome -> Foto Base64)
   const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
   
-  // Notification State
   const [notifications, setNotifications] = useState<any[]>([]);
   
   const { toast } = useToast();
   
-  // Custom Logo State
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('custom_logo'));
 
-  // Ref para input de arquivo de perfil
   const profileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
     try {
+      setLoading(true);
       const userData = await User.me();
       setCurrentUser(userData);
       const adminStatus = userData?.name === 'Marconi Fabian' || userData?.admin === true;
       setIsAdmin(adminStatus);
       setCustomLogo(localStorage.getItem('custom_logo'));
 
-      // Carregar Usuários para pegar os Avatares e mapear pelo NOME
-      const allUsers = EntityStorage.list<any>('AuthorizedUser');
+      // Agora Async
+      const allUsers = await EntityStorage.list<any>('AuthorizedUser');
       const avatarMap: Record<string, string> = {};
       allUsers.forEach(u => {
         if (u.avatar && u.name) {
@@ -51,19 +49,16 @@ export function ReportsPage() {
       });
       setUserAvatars(avatarMap);
 
-      // Carregar Relatórios
+      // Agora Async
       const allReports = await DailyReport.list();
       
-      // Admin vê tudo, outros veem apenas o que criaram (comparando nome)
       const visible = adminStatus ? allReports : allReports.filter(r => r.created_by === userData?.name);
       
       setReports(visible);
       setFilteredReports(visible);
 
-      // Carregar Notificações
       const notifs = [];
       
-      // Notificação para Admin: Usuários Pendentes
       if (adminStatus) {
          const pending = allUsers.filter(u => u.status === 'pending');
          if (pending.length > 0) {
@@ -77,7 +72,6 @@ export function ReportsPage() {
          }
       }
 
-      // Notificação Geral
       notifs.push({
          id: 'welcome',
          title: 'Bem-vindo ao RDO Online',
@@ -89,6 +83,8 @@ export function ReportsPage() {
 
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -130,15 +126,13 @@ export function ReportsPage() {
     reader.onloadend = async () => {
         const base64 = reader.result as string;
         
-        // 1. Atualizar no EntityStorage (Banco de Dados)
-        // Precisamos encontrar o ID do usuário atual
-        const allUsers = EntityStorage.list<any>('AuthorizedUser');
-        const dbUser = allUsers.find(u => u.id === currentUser.id); // Busca por ID é mais segura
+        // Agora Async
+        const allUsers = await EntityStorage.list<any>('AuthorizedUser');
+        const dbUser = allUsers.find(u => u.id === currentUser.id); 
         
         if (dbUser) {
             await EntityStorage.update('AuthorizedUser', dbUser.id, { avatar: base64 });
             
-            // 2. Atualizar no SessionStorage (Sessão Atual)
             const updatedSession = { ...currentUser, avatar: base64 };
             localStorage.setItem('currentUser', JSON.stringify(updatedSession));
             
@@ -160,21 +154,17 @@ export function ReportsPage() {
       }
   };
 
-  // Avatar atual (usa o nome como chave no avatarMap, mas o currentUser já pode ter o avatar na sessão, mas é melhor pegar do mapa atualizado)
   const hasPhoto = currentUser?.name ? userAvatars[currentUser.name] : null;
 
-  // Decide qual logo exibir
   const displayLogo = customLogo || SYSTEM_CONFIG.defaultLogo;
 
   return (
     <div className="min-h-screen bg-[#0f2441] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] font-sans flex flex-col">
       
-      {/* Header Area */}
       <div className="px-6 pt-8 pb-6">
         <div className="flex justify-between items-center mb-6 gap-2">
             <div className="flex items-center gap-3 flex-1 min-w-0">
                 
-                {/* LOGO DA EMPRESA */}
                 <div className="bg-white p-1 rounded-lg h-12 w-auto px-3 flex items-center justify-center overflow-hidden shadow-md shrink-0 opacity-90">
                     <img 
                         src={displayLogo} 
@@ -185,7 +175,6 @@ export function ReportsPage() {
 
                 <div className="h-8 w-px bg-white/10 mx-1 shrink-0"></div>
                 
-                {/* INFO DO USUÁRIO + UPLOAD DE FOTO */}
                 <div className="flex items-center gap-4 min-w-0 flex-1">
                     <div 
                         className="relative group cursor-pointer shrink-0"
@@ -234,10 +223,8 @@ export function ReportsPage() {
                 </div>
             </div>
             
-            {/* Ícones da Direita: Notificações e Sair */}
             <div className="flex flex-col items-end gap-3 shrink-0 ml-1">
                 
-                {/* SINO DE NOTIFICAÇÕES (CORRIGIDO PARA MOBILE) */}
                 <Popover>
                     <PopoverTrigger>
                         <div className="relative p-2 text-white/70 hover:text-white transition-colors cursor-pointer bg-white/5 rounded-xl hover:bg-white/10">
@@ -297,7 +284,6 @@ export function ReportsPage() {
                     </PopoverContent>
                 </Popover>
 
-                {/* BOTÃO SAIR */}
                 <button 
                     onClick={handleLogout}
                     className="p-2 text-red-300 hover:text-red-100 transition-colors bg-red-500/10 hover:bg-red-500/20 rounded-xl"
@@ -308,7 +294,6 @@ export function ReportsPage() {
 
         </div>
 
-        {/* Action Buttons Grid */}
         <div className="grid grid-cols-2 gap-3 pb-2">
             <button 
                 onClick={() => window.location.hash = createPageUrl('DailyReport')}
@@ -341,10 +326,8 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* Main Content Sheet */}
       <div className="flex-1 bg-white rounded-t-[32px] overflow-hidden flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.2)]">
         
-        {/* Search & Header */}
         <div className="px-6 pt-6 pb-2">
             <div className="flex items-center gap-2 text-[#0f2441] mb-4">
                 <HistoryIcon className="w-5 h-5 text-sky-600" />
@@ -369,9 +352,12 @@ export function ReportsPage() {
             </div>
         </div>
 
-        {/* List Content */}
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
-            {filteredReports.length === 0 ? (
+            {loading ? (
+                <div className="flex items-center justify-center py-10">
+                    <div className="w-8 h-8 border-4 border-slate-200 border-t-sky-600 rounded-full animate-spin"></div>
+                </div>
+            ) : filteredReports.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 opacity-40">
                     <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-4">
                         <ClipboardList className="w-10 h-10 text-slate-300" />
@@ -425,7 +411,6 @@ export function ReportsPage() {
   );
 }
 
-// Icon helper
 const HistoryIcon = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12" /><path d="M3 3v9h9" /><path d="M12 7v5l4 2" /></svg>
 );

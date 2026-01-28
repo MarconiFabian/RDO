@@ -17,8 +17,8 @@ export function ManagementPage() {
   const [activeTab, setActiveTab] = useState("reports");
   const [dataList, setDataList] = useState<any[]>([]);
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
   
-  // Estado para visualização da Logo
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('custom_logo'));
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -47,8 +47,9 @@ export function ManagementPage() {
   };
 
   const refreshData = useCallback(async () => {
+    setLoadingData(true);
     const currentUser = await User.me();
-    // Verifica por nome ou flag de admin
+    
     if (currentUser?.name !== 'Marconi Fabian' && currentUser?.admin !== true) {
       window.location.hash = '#/';
       return;
@@ -56,8 +57,10 @@ export function ManagementPage() {
     setIsAuthorized(true);
 
     const entity = getEntityName(activeTab);
-    const items = EntityStorage.list<any>(entity);
+    // AGORA COM AWAIT
+    const items = await EntityStorage.list<any>(entity);
     setDataList(items);
+    setLoadingData(false);
   }, [activeTab]);
 
   useEffect(() => {
@@ -70,11 +73,10 @@ export function ManagementPage() {
     return () => window.removeEventListener('storage-updated', handleStorage);
   }, [refreshData]);
 
-  // Função de Upload da Logo
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) { // Limite de 2MB
+      if (file.size > 2 * 1024 * 1024) { 
          toast({ title: "Arquivo muito grande", description: "Use uma imagem menor que 2MB.", variant: "destructive" });
          return;
       }
@@ -90,7 +92,6 @@ export function ManagementPage() {
     }
   };
 
-  // Função para Resetar Logo
   const handleResetLogo = () => {
     if (window.confirm("Deseja remover a logo personalizada deste dispositivo? O sistema voltará a usar o link padrão.")) {
         localStorage.removeItem('custom_logo');
@@ -103,11 +104,11 @@ export function ManagementPage() {
   const handleExcluir = async (id: string, nome: string) => {
     if (!id) return;
     try {
+      // Otimistic update
       setDataList(current => current.filter(item => item.id !== id));
       const entity = getEntityName(activeTab);
       await EntityStorage.delete(entity, id);
       toast({ title: "Removido", description: `${nome} apagado.`, variant: "default" });
-      setTimeout(refreshData, 100);
     } catch (error) {
       refreshData();
       toast({ title: "Erro", description: "Falha ao apagar.", variant: "destructive" });
@@ -134,8 +135,9 @@ export function ManagementPage() {
   };
 
   const handleToggleUser = async (user: any) => {
-    if (user.name === 'Marconi Fabian') return; // Protege o admin principal
+    if (user.name === 'Marconi Fabian') return; 
     const newStatus = user.status === 'active' ? 'blocked' : 'active';
+    // Otimistic
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus, active: newStatus === 'active' } : u));
     await EntityStorage.update('AuthorizedUser', user.id, { status: newStatus, active: newStatus === 'active' });
     toast({ title: "Status Atualizado" });
@@ -186,13 +188,11 @@ export function ManagementPage() {
 
   if (!isAuthorized) return null;
 
-  // Decide qual logo mostrar no preview
   const displayLogo = customLogo || SYSTEM_CONFIG.defaultLogo;
 
   return (
     <div className="min-h-screen bg-[#0f2441] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] pb-10 font-sans">
       
-      {/* Header */}
       <div className="pt-8 pb-6 px-6">
         <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-4">
@@ -208,11 +208,8 @@ export function ManagementPage() {
                 </div>
             </div>
             
-            {/* Header Right Area */}
-            <div></div>
         </div>
 
-        {/* Navigation Tabs - Grid Layout */}
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 pb-2">
             {[
                 { id: 'reports', icon: FileText, label: 'Diários' },
@@ -238,10 +235,8 @@ export function ManagementPage() {
         </div>
       </div>
 
-      {/* Main Content Card */}
       <main className="px-4 space-y-4">
         
-        {/* LOGO CONFIG CARD (EDITABLE) */}
         <div className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4 mb-2">
             <div className="flex items-center gap-3 w-full">
                  <div className="bg-sky-50 p-2.5 rounded-xl border border-sky-100 shrink-0">
@@ -256,12 +251,10 @@ export function ManagementPage() {
             </div>
             
             <div className="flex items-center gap-3 w-full md:w-auto">
-                 {/* Preview Area */}
                  <div className="h-12 w-28 border border-slate-200 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden relative shrink-0">
                      <img src={displayLogo} alt="Logo Atual" className="h-full w-full object-contain p-1" />
                  </div>
 
-                 {/* Hidden Input */}
                  <input 
                     type="file" 
                     ref={fileInputRef} 
@@ -270,7 +263,6 @@ export function ManagementPage() {
                     onChange={handleLogoUpload}
                  />
 
-                 {/* Action Buttons */}
                  <div className="flex gap-2">
                      <button 
                         onClick={() => fileInputRef.current?.click()}
@@ -293,10 +285,9 @@ export function ManagementPage() {
             </div>
         </div>
 
-        {/* Info & Actions Bar */}
         <div className="flex justify-between items-center px-2 pt-2">
             <span className="text-[10px] font-bold text-sky-200 uppercase tracking-wider">
-                {dataList.length} Registros encontrados
+                {loadingData ? "Carregando..." : `${dataList.length} Registros encontrados`}
             </span>
             {['reports', 'users'].includes(activeTab) && (
                 <button 
@@ -308,7 +299,6 @@ export function ManagementPage() {
             )}
         </div>
 
-        {/* Input Form for Simple Lists */}
         {['interventions', 'materials', 'functions'].includes(activeTab) && (
             <div className="bg-white p-3 rounded-2xl shadow-xl border border-slate-100 flex gap-2 items-center">
                 <div className="w-10 h-10 bg-[#0f3460] rounded-xl flex items-center justify-center text-white shrink-0">
@@ -328,9 +318,10 @@ export function ManagementPage() {
             </div>
         )}
 
-        {/* Data List */}
         <div className="space-y-3 pb-24">
-            {dataList.length === 0 ? (
+            {loadingData ? (
+                 <div className="text-center py-20 text-white/50 animate-pulse">Carregando dados...</div>
+            ) : dataList.length === 0 ? (
                 <div className="text-center py-20 flex flex-col items-center justify-center opacity-30">
                     <Database className="w-16 h-16 text-white mb-4" />
                     <p className="text-white font-medium">Nenhum dado encontrado</p>
@@ -341,7 +332,6 @@ export function ManagementPage() {
                         key={item.id} 
                         className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 flex justify-between items-center group relative overflow-hidden"
                     >
-                        {/* Avatar do Usuário (Se for aba Usuários) */}
                         {activeTab === 'users' && (
                             <div className="mr-3 shrink-0">
                                 <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">

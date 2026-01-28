@@ -1,9 +1,8 @@
-
 import { EntityStorage } from './Storage';
 
 export class DailyReport {
   static async list(order: string = '-date') {
-    let list = EntityStorage.list<any>('DailyReport');
+    let list = await EntityStorage.list<any>('DailyReport');
     if (order.startsWith('-')) {
       const field = order.substring(1);
       list.sort((a, b) => new Date(b[field]).getTime() - new Date(a[field]).getTime());

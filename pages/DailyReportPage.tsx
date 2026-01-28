@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { DailyReport } from '../entities/DailyReport';
 import { InterventionType } from '../entities/InterventionType';
@@ -68,15 +67,15 @@ export function DailyReportPage() {
     async function init() {
       const u = await User.me();
       
-      const users = EntityStorage.list<any>('AuthorizedUser');
-      const dbUser = users.find(dbU => dbU.email === u?.email);
+      const users = await EntityStorage.list<any>('AuthorizedUser');
+      const dbUser = users.find((dbU: any) => dbU.email === u?.email);
       const userWithAvatar = dbUser ? { ...u, avatar: dbUser.avatar } : u;
       
       setCurrentUser(userWithAvatar);
 
       // Criar mapa de avatares para equipe
       const map: Record<string, string> = {};
-      users.forEach(user => {
+      users.forEach((user: any) => {
         if (user.avatar && user.name) {
             map[user.name.trim().toLowerCase()] = user.avatar;
         }

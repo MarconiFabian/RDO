@@ -11,8 +11,8 @@ export function TestDeletionPage() {
   const [logs, setLogs] = useState<string[]>([]);
 
   // Carrega dados e força atualização
-  const refresh = () => {
-    const data = EntityStorage.list<any>('MaterialType');
+  const refresh = async () => {
+    const data = await EntityStorage.list<any>('MaterialType');
     setItems([...data]); // Cria novo array para forçar render do React
   };
 

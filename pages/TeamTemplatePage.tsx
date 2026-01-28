@@ -34,11 +34,10 @@ export function TeamTemplatePage() {
       JobFunction.list()
     ]);
     
-    // Carregar usuários para mapear fotos
-    const allUsers = EntityStorage.list<any>('AuthorizedUser');
+    // Agora Async
+    const allUsers = await EntityStorage.list<any>('AuthorizedUser');
     const map: Record<string, string> = {};
     
-    // Cria um mapa onde a chave é o nome (normalizado) e o valor é o avatar
     allUsers.forEach(user => {
         if (user.avatar && user.name) {
             map[user.name.trim().toLowerCase()] = user.avatar;
@@ -46,7 +45,6 @@ export function TeamTemplatePage() {
     });
     setAvatarMap(map);
 
-    // Filter by name now
     setMembers(m.filter(member => member.user_email === u.name));
     setJobFunctions(jf);
   };
@@ -57,7 +55,7 @@ export function TeamTemplatePage() {
     
     await TeamTemplate.create({
       ...newMember,
-      user_email: currentUser.name, // Save with name instead of email
+      user_email: currentUser.name, 
       active: true
     });
     
@@ -83,7 +81,6 @@ export function TeamTemplatePage() {
   return (
     <div className="min-h-screen bg-[#0f2441] pb-10">
       
-      {/* Header */}
       <div className="pt-8 pb-8 px-6 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
         <div className="flex items-center gap-4">
             <button onClick={() => window.location.hash = createPageUrl('Reports')} className="text-white/80 hover:text-white transition-colors">
@@ -100,7 +97,6 @@ export function TeamTemplatePage() {
 
       <main className="px-4 space-y-6 max-w-lg mx-auto">
         
-        {/* Form Card */}
         <div className="bg-white rounded-[24px] p-6 shadow-xl">
            <div className="flex items-center gap-2 mb-6">
               <UserPlus className="w-5 h-5 text-[#0f2441]" />
@@ -142,7 +138,6 @@ export function TeamTemplatePage() {
            </form>
         </div>
 
-        {/* List Card */}
         <div className="bg-white rounded-[24px] overflow-hidden shadow-xl min-h-[300px]">
            <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
               <div className="flex items-center gap-2">
@@ -176,7 +171,6 @@ export function TeamTemplatePage() {
                     return (
                         <div key={m.id} className="grid grid-cols-12 px-6 py-3 items-center hover:bg-slate-50 transition-colors group">
                            <div className="col-span-10 flex items-center gap-3 min-w-0">
-                                {/* AVATAR DO COLABORADOR */}
                                 <div className="w-10 h-10 rounded-full bg-slate-200 border-2 border-white shadow-sm flex items-center justify-center overflow-hidden shrink-0">
                                     {avatar ? (
                                         <img src={avatar} alt={m.name} className="w-full h-full object-cover" />

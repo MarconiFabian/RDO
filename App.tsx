@@ -10,11 +10,14 @@ import { TeamTemplatePage } from './pages/TeamTemplatePage';
 import { LoginPage } from './pages/LoginPage';
 import { Toaster } from './components/ui/use-toast';
 import { User } from './entities/User';
+import { EntityStorage } from './entities/Storage';
+import { Wifi, WifiOff } from 'lucide-react';
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.hash || '#/');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isOnlineStorage, setIsOnlineStorage] = useState(false);
 
   const checkAuth = async () => {
     const user = await User.me();
@@ -24,6 +27,7 @@ export default function App() {
 
   useEffect(() => {
     checkAuth();
+    setIsOnlineStorage(EntityStorage.isOnline());
 
     const handleHashChange = () => {
       setCurrentPath(window.location.hash || '#/');
@@ -77,6 +81,23 @@ export default function App() {
     <div className="min-h-screen bg-[#0f2441] font-sans antialiased text-slate-900 overflow-x-hidden selection:bg-sky-200">
       {renderPage()}
       <Toaster />
+
+      {/* Connection Status Indicator */}
+      {currentUser && (
+        <div className={`fixed bottom-2 left-2 px-2 py-1 rounded-full flex items-center gap-1.5 text-[9px] font-bold z-50 pointer-events-none opacity-60 ${isOnlineStorage ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'}`}>
+           {isOnlineStorage ? (
+             <>
+                <Wifi className="w-3 h-3" />
+                <span>ONLINE (Nuvem)</span>
+             </>
+           ) : (
+             <>
+                <WifiOff className="w-3 h-3" />
+                <span>OFFLINE (Local)</span>
+             </>
+           )}
+        </div>
+      )}
     </div>
   );
 }
