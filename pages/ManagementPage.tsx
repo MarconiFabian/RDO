@@ -145,6 +145,7 @@ export function ManagementPage() {
         // Se o alvo for um Admin
         if (targetUser.admin) {
             // Se eu não sou o Marconi E não fui eu que promovi esse admin...
+            // OBS: Se promoted_by não existir no banco, assume que só o Chefe pode apagar
             const iPromotedHim = targetUser.promoted_by && (String(targetUser.promoted_by) === String(currentUser?.id));
             
             if (!iAmTheBoss && !iPromotedHim) {
@@ -156,7 +157,6 @@ export function ManagementPage() {
                 return;
             }
         }
-        // Se o alvo for Usuário Comum, qualquer Admin pode excluir.
     }
 
     try {
@@ -200,6 +200,7 @@ export function ManagementPage() {
         const iAmTheBoss = currentUser?.name === 'Marconi Fabian';
         const iPromotedHim = user.promoted_by && (String(user.promoted_by) === String(currentUser?.id));
         
+        // Se promoted_by for nulo (banco antigo), apenas o Chefe pode bloquear
         if (!iAmTheBoss && !iPromotedHim) {
              toast({ title: "Hierarquia", description: "Você não pode bloquear um Admin que não está abaixo de você.", variant: "destructive" });
              return;
@@ -209,6 +210,7 @@ export function ManagementPage() {
     const previousList = [...dataList];
     const newStatus = user.status === 'active' ? 'blocked' : 'active';
     
+    // Atualização Visual (Otimista)
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus, active: newStatus === 'active' } : u));
     
     try {
@@ -217,7 +219,7 @@ export function ManagementPage() {
         await refreshData();
     } catch (error) {
         setDataList(previousList);
-        toast({ title: "Erro", description: "Falha ao salvar status.", variant: "destructive" });
+        toast({ title: "Erro", description: "Falha ao salvar status. Tente novamente.", variant: "destructive" });
     }
   };
 
@@ -235,49 +237,58 @@ export function ManagementPage() {
 
     try {
         if (isPromoting) {
-            // === PROMOVENDO A ADMINISTRADOR ===
-            // Qualquer Admin atual pode promover alguém que está abaixo (usuário comum).
-            
-            const updates = { 
-                admin: true, 
-                promoted_by: currentUser?.id  // Marca quem deu o poder (Padrinho)
-            };
-            
-            await EntityStorage.update('AuthorizedUser', user.id, updates);
-            toast({ title: "Promovido!", description: `${user.name} agora é Administrador.` });
+            // === PROMOVENDO ===
+            // Tenta salvar COM a hierarquia (promoted_by)
+            try {
+                const updates = { 
+                    admin: true, 
+                    promoted_by: currentUser?.id 
+                };
+                await EntityStorage.update('AuthorizedUser', user.id, updates);
+                toast({ title: "Promovido!", description: `${user.name} agora é Administrador.` });
+            } catch (hierarchyError) {
+                // FALLBACK: Se falhar (ex: coluna promoted_by não existe no DB), tenta salvar APENAS o admin
+                console.warn("Erro ao salvar hierarquia. Tentando modo de compatibilidade...", hierarchyError);
+                await EntityStorage.update('AuthorizedUser', user.id, { admin: true });
+                toast({ title: "Promovido!", description: `${user.name} agora é Administrador (Modo Simples).` });
+            }
 
         } else {
-            // === REBAIXANDO (REMOVER ADMIN) ===
-            // Apenas o Dono ou o Padrinho podem tirar o poder.
-            
+            // === REBAIXANDO ===
             const iAmTheBoss = currentUser?.name === 'Marconi Fabian';
+            // Se promoted_by não existe no objeto user, assume null
             const iPromotedHim = user.promoted_by && (String(user.promoted_by) === String(currentUser?.id));
 
-            if (!iAmTheBoss && !iPromotedHim) {
-                // Reverte a mudança visual pq não tem permissão
+            // Se eu não sou o dono, e o usuário tem um 'padrinho' que NÃO sou eu, bloqueia.
+            // Se o usuário não tem padrinho (promoted_by null), apenas o Dono pode remover.
+            if (!iAmTheBoss && (!user.promoted_by || !iPromotedHim)) {
                 setDataList(previousList);
                 toast({ 
                     title: "Hierarquia Bloqueada", 
-                    description: "Você não tem poder para rebaixar este Administrador. Apenas quem o promoveu pode fazer isso.", 
+                    description: "Você não tem poder para rebaixar este Administrador. Apenas o Dono ou quem o promoveu.", 
                     variant: "destructive" 
                 });
                 return;
             }
 
-            const updates = { 
-                admin: false, 
-                promoted_by: null // Limpa o padrinho
-            };
-            await EntityStorage.update('AuthorizedUser', user.id, updates);
+            try {
+                // Tenta limpar o promoted_by
+                const updates = { admin: false, promoted_by: null };
+                await EntityStorage.update('AuthorizedUser', user.id, updates);
+            } catch (demoteError) {
+                // FALLBACK: Salva apenas admin: false
+                await EntityStorage.update('AuthorizedUser', user.id, { admin: false });
+            }
+            
             toast({ title: "Rebaixado", description: `${user.name} agora é Usuário Comum.` });
         }
         
         await refreshData(); 
 
     } catch (error) {
-        console.error("Erro ao alterar admin:", error);
-        setDataList(previousList); // Rollback
-        toast({ title: "Erro", description: "Não foi possível salvar a alteração.", variant: "destructive" });
+        console.error("Erro fatal ao alterar admin:", error);
+        setDataList(previousList); // Rollback visual
+        toast({ title: "Erro Crítico", description: "Não foi possível salvar a alteração no banco de dados.", variant: "destructive" });
     }
   };
 
