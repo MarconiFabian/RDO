@@ -4,14 +4,16 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { User } from '../entities/User';
+import { EntityStorage } from '../entities/Storage';
 import { useToast } from '../components/ui/use-toast';
-import { Loader2, ImageIcon, User as UserIcon, Lock, Hash } from 'lucide-react';
+import { Loader2, ImageIcon, User as UserIcon, Lock, Hash, Wifi, WifiOff } from 'lucide-react';
 import { cn, SYSTEM_CONFIG } from '../utils';
 
 export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [isOnline, setIsOnline] = useState(false);
   
   // Custom Logo State: Tenta pegar local, senão usa a Global
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('custom_logo'));
@@ -27,8 +29,10 @@ export function LoginPage() {
 
   // Escuta atualizações de storage caso o admin mude a logo em outra aba
   useEffect(() => {
+    setIsOnline(EntityStorage.isOnline());
     const handleStorage = () => {
         setCustomLogo(localStorage.getItem('custom_logo'));
+        setIsOnline(EntityStorage.isOnline());
     };
     window.addEventListener('storage-updated', handleStorage);
     return () => window.removeEventListener('storage-updated', handleStorage);
@@ -100,6 +104,17 @@ export function LoginPage() {
       
       {/* Background Overlay for better text readability */}
       <div className="absolute inset-0 bg-[#0f2441]/80 pointer-events-none"></div>
+
+      {/* Status Indicator */}
+      <div className={cn(
+        "absolute top-4 right-4 px-3 py-1.5 rounded-full flex items-center gap-2 text-[10px] font-bold z-20 shadow-sm border backdrop-blur-md transition-colors",
+        isOnline 
+            ? "bg-green-500/10 text-green-400 border-green-500/20" 
+            : "bg-orange-500/10 text-orange-400 border-orange-500/20"
+      )}>
+        {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+        <span>{isOnline ? "CONECTADO" : "OFFLINE (LOCAL)"}</span>
+      </div>
 
       {/* Logo Area */}
       <div className="flex flex-col items-center mb-2 animate-in fade-in zoom-in duration-500 text-center z-10 relative">

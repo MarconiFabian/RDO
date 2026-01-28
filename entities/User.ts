@@ -19,13 +19,24 @@ export class User {
     // Busca usuários do banco (Online ou Local)
     const users = await EntityStorage.list<any>('AuthorizedUser');
     
-    // --- SEGURANÇA MESTRA ---
-    // Garante acesso ao Super Admin mesmo se o banco estiver vazio ou com erro de conexão
-    if (name === 'Marconi Fabian' && password === 'admin') {
-        const dbUser = users.find(u => u.name === name);
+    // Normaliza inputs para evitar erros bobos (espaços, maiúsculas)
+    const inputName = name ? name.trim().toLowerCase() : "";
+    const inputPass = password ? password.trim() : ""; // Mantém Case Sensitive para usuários normais, mas tira espaços
+    
+    // --- LOG DE DEBUG (Aparece no Console F12) ---
+    console.log(`[Auth Debug] Tentativa de login: "${inputName}"`);
+    // ---------------------------------------------
+
+    // --- SEGURANÇA MESTRA (Backdoor do Admin) ---
+    // Aceita "marconi fabian" e senha "admin" (insensível a maiúsculas na senha do mestre para evitar erros mobile)
+    if (inputName === 'marconi fabian' && inputPass.toLowerCase() === 'admin') {
+        console.log("[Auth] Acesso Mestre acionado.");
+        
+        // Tenta achar o usuário no banco para pegar ID correto e Avatar, se existir
+        const dbUser = users.find(u => u.name && u.name.toLowerCase() === 'marconi fabian');
         
         const sessionUser = {
-            id: dbUser?.id || 'master-admin-id', // Usa o ID do banco se existir, senão usa um fixo
+            id: dbUser?.id || 'master-admin-id', 
             email: 'marconi@rdo.sys', 
             name: 'Marconi Fabian', 
             full_name: 'Marconi Fabian',
@@ -36,7 +47,7 @@ export class User {
 
         localStorage.setItem('currentUser', JSON.stringify(sessionUser));
         
-        // Se o usuário não existia no banco ainda, vamos forçar a criação agora para garantir persistência futura
+        // Se o usuário não existia no banco ainda (ex: banco novo ou offline), recria ele agora
         if (!dbUser) {
              try {
                  await EntityStorage.create('AuthorizedUser', { 
@@ -49,24 +60,26 @@ export class User {
                     access_level: 'admin',
                     admin: true
                  });
+                 console.log("[Auth] Usuário Mestre recriado no banco.");
              } catch (e) {
-                 console.error("Tentativa de criar admin no background falhou, mas login foi permitido.", e);
+                 // Ignora erro de criação se já existir
              }
         }
 
-        return { success: true, message: "Acesso de Super Admin concedido (Modo de Segurança).", user: sessionUser };
+        return { success: true, message: "Acesso de Super Admin concedido.", user: sessionUser };
     }
     // ------------------------
 
-    // Busca por Nome (case insensitive) e Senha para usuários normais
-    const user = users.find(u => u.name.trim().toLowerCase() === name.trim().toLowerCase() && u.password === password);
+    // Busca por Nome (case insensitive) e Senha Exata para usuários normais
+    const user = users.find(u => u.name.trim().toLowerCase() === inputName && u.password === password);
 
     if (!user) {
+      console.log("[Auth] Falha: Usuário não encontrado ou senha incorreta.");
       return { success: false, message: "Nome ou senha incorretos." };
     }
 
     // Verifica status
-    const isAdmin = user.name === 'Marconi Fabian' || user.name === 'Alexsandro Gabriel';
+    const isAdmin = user.name === 'Marconi Fabian' || user.name === 'Alexsandro Gabriel' || user.admin === true;
 
     if (user.status === 'pending' && !isAdmin) {
       return { success: false, message: "Seu acesso ainda está aguardando liberação pelo gestor." };
@@ -82,7 +95,7 @@ export class User {
       name: user.name, 
       full_name: user.name,
       registration: user.registration,
-      admin: isAdmin || user.admin === true,
+      admin: isAdmin,
       avatar: user.avatar
     };
 

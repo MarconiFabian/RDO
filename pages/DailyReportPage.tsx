@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { DailyReport } from '../entities/DailyReport';
 import { InterventionType } from '../entities/InterventionType';
@@ -53,7 +54,8 @@ export function DailyReportPage() {
     status: "em_andamento", 
     team_members: [],
     replaced_materials: [], // Lista de materiais { name, quantity }
-    date: new Date().toISOString().split('T')[0],
+    // Fix: Usa formatação local para evitar problemas de UTC
+    date: format(new Date(), 'yyyy-MM-dd'),
     work_executed: "", 
     weather_morning: "Sol", weather_afternoon: "Sol", weather_night: "Limpo", 
     occurrences: "", 
@@ -98,7 +100,8 @@ export function DailyReportPage() {
         const original = await DailyReport.get(copyId);
         if (original) {
           const { id, created_at, updated_at, ...copyData } = original;
-          setReport({ ...copyData, date: new Date().toISOString().split('T')[0], om_type: copyData.om_type || 'om', replaced_materials: copyData.replaced_materials || [] });
+          // Ao copiar, também garantimos a data de hoje
+          setReport({ ...copyData, date: format(new Date(), 'yyyy-MM-dd'), om_type: copyData.om_type || 'om', replaced_materials: copyData.replaced_materials || [] });
         }
       } else {
         setReport(prev => ({ ...prev, name: u.full_name, registration: u.registration }));
