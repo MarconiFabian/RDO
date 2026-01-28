@@ -20,6 +20,7 @@ export function ManagementPage() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [savingLogo, setSavingLogo] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null); // Armazena o usuário logado para verificações de hierarquia
   
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('custom_logo'));
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,9 +51,10 @@ export function ManagementPage() {
 
   const refreshData = useCallback(async () => {
     setLoadingData(true);
-    const currentUser = await User.me();
+    const userSession = await User.me();
+    setCurrentUser(userSession);
     
-    if (currentUser?.name !== 'Marconi Fabian' && currentUser?.admin !== true) {
+    if (userSession?.name !== 'Marconi Fabian' && userSession?.admin !== true) {
       window.location.hash = '#/';
       return;
     }
@@ -126,6 +128,31 @@ export function ManagementPage() {
 
   const handleExcluir = async (id: string, nome: string) => {
     if (!id) return;
+
+    // 1. TRAVA DE SEGURANÇA MESTRA (Ninguém apaga o Dono)
+    if (nome === 'Marconi Fabian') {
+        toast({ title: "Ação Proibida", description: "O Administrador Primário não pode ser excluído do sistema.", variant: "destructive" });
+        return;
+    }
+
+    const itemToDelete = dataList.find(i => i.id === id);
+
+    // 2. HIERARQUIA DE EXCLUSÃO DE ADMINS
+    if (activeTab === 'users' && itemToDelete?.admin) {
+        const isRoot = currentUser?.name === 'Marconi Fabian';
+        const isPromoter = itemToDelete.promoted_by === currentUser?.id;
+        
+        // Se não for o dono do sistema E não for quem promoveu o admin, bloqueia.
+        if (!isRoot && !isPromoter) {
+            toast({ 
+                title: "Hierarquia Bloqueada", 
+                description: "Você não tem permissão para excluir este administrador. Apenas quem concedeu o acesso pode removê-lo.", 
+                variant: "destructive" 
+            });
+            return;
+        }
+    }
+
     try {
       setDataList(current => current.filter(item => item.id !== id));
       const entity = getEntityName(activeTab);
@@ -157,7 +184,10 @@ export function ManagementPage() {
   };
 
   const handleToggleUser = async (user: any) => {
-    if (user.name === 'Marconi Fabian') return; 
+    if (user.name === 'Marconi Fabian') {
+        toast({ title: "Ação Proibida", description: "O Administrador Primário não pode ser bloqueado.", variant: "destructive" });
+        return; 
+    }
     const newStatus = user.status === 'active' ? 'blocked' : 'active';
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus, active: newStatus === 'active' } : u));
     await EntityStorage.update('AuthorizedUser', user.id, { status: newStatus, active: newStatus === 'active' });
@@ -165,14 +195,44 @@ export function ManagementPage() {
   };
 
   const handleToggleAdmin = async (user: any) => {
-    if (user.name === 'Marconi Fabian') return;
-    const newAdminStatus = !user.admin;
-    setDataList(prev => prev.map(u => u.id === user.id ? { ...u, admin: newAdminStatus } : u));
-    await EntityStorage.update('AuthorizedUser', user.id, { admin: newAdminStatus });
-    toast({ 
-        title: newAdminStatus ? "Novo Administrador" : "Administrador Removido", 
-        description: `O usuário ${user.name} ${newAdminStatus ? 'agora é admin' : 'agora é usuário comum'}.`
-    });
+    if (user.name === 'Marconi Fabian') {
+        toast({ title: "Ação Proibida", description: "O Administrador Primário não pode ser rebaixado.", variant: "destructive" });
+        return;
+    }
+
+    const isPromoting = !user.admin;
+
+    if (isPromoting) {
+        // PROMOVENDO: Salva quem promoveu (currentUser.id)
+        const updates = { 
+            admin: true, 
+            promoted_by: currentUser?.id // Rastreabilidade Hierárquica
+        };
+        setDataList(prev => prev.map(u => u.id === user.id ? { ...u, ...updates } : u));
+        await EntityStorage.update('AuthorizedUser', user.id, updates);
+        toast({ title: "Novo Administrador", description: `${user.name} agora é admin (Promovido por você).` });
+    } else {
+        // REBAIXANDO: Verifica se quem está tentando rebaixar é quem promoveu
+        const isRoot = currentUser?.name === 'Marconi Fabian';
+        const isPromoter = user.promoted_by === currentUser?.id;
+
+        if (!isRoot && !isPromoter) {
+            toast({ 
+                title: "Permissão Negada", 
+                description: "Apenas o administrador que concedeu o acesso pode removê-lo.", 
+                variant: "destructive" 
+            });
+            return;
+        }
+
+        const updates = { 
+            admin: false, 
+            promoted_by: null // Limpa o rastro
+        };
+        setDataList(prev => prev.map(u => u.id === user.id ? { ...u, ...updates } : u));
+        await EntityStorage.update('AuthorizedUser', user.id, updates);
+        toast({ title: "Administrador Removido", description: `${user.name} voltou a ser usuário comum.` });
+    }
   };
 
   const safeFormatDate = (dateString: any) => {
@@ -446,7 +506,13 @@ export function ManagementPage() {
                             
                             <button 
                                 onClick={() => handleExcluir(item.id, item.name || item.om_number)}
-                                className="w-8 h-8 bg-red-50 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-100 transition-colors"
+                                className={cn(
+                                    "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                    (item.name === 'Marconi Fabian' && activeTab === 'users')
+                                        ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+                                        : "bg-red-50 text-red-500 hover:bg-red-100"
+                                )}
+                                disabled={item.name === 'Marconi Fabian' && activeTab === 'users'}
                             >
                                 <Trash2 className="w-4 h-4" />
                             </button>
