@@ -188,10 +188,22 @@ export function ManagementPage() {
         toast({ title: "Ação Proibida", description: "O Administrador Primário não pode ser bloqueado.", variant: "destructive" });
         return; 
     }
+    
+    // Backup para rollback
+    const previousList = [...dataList];
     const newStatus = user.status === 'active' ? 'blocked' : 'active';
+    
+    // Atualização Otimista
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus, active: newStatus === 'active' } : u));
-    await EntityStorage.update('AuthorizedUser', user.id, { status: newStatus, active: newStatus === 'active' });
-    toast({ title: "Status Atualizado", description: `Usuário ${newStatus === 'active' ? 'ativado' : 'bloqueado'}.` });
+    
+    try {
+        await EntityStorage.update('AuthorizedUser', user.id, { status: newStatus, active: newStatus === 'active' });
+        toast({ title: "Status Atualizado", description: `Usuário ${newStatus === 'active' ? 'ativado' : 'bloqueado'}.` });
+        await refreshData(); // Garante consistência
+    } catch (error) {
+        setDataList(previousList); // Reverte se falhar
+        toast({ title: "Erro", description: "Falha ao salvar status. Tente novamente.", variant: "destructive" });
+    }
   };
 
   const handleToggleAdmin = async (user: any) => {
@@ -201,37 +213,50 @@ export function ManagementPage() {
     }
 
     const isPromoting = !user.admin;
+    const previousList = [...dataList];
 
-    if (isPromoting) {
-        // PROMOVENDO: Salva quem promoveu (currentUser.id)
-        const updates = { 
-            admin: true, 
-            promoted_by: currentUser?.id // Rastreabilidade Hierárquica
-        };
-        setDataList(prev => prev.map(u => u.id === user.id ? { ...u, ...updates } : u));
-        await EntityStorage.update('AuthorizedUser', user.id, updates);
-        toast({ title: "Novo Administrador", description: `${user.name} agora é admin (Promovido por você).` });
-    } else {
-        // REBAIXANDO: Verifica se quem está tentando rebaixar é quem promoveu
-        const isRoot = currentUser?.name === 'Marconi Fabian';
-        const isPromoter = user.promoted_by === currentUser?.id;
+    // Atualização Otimista (Muda na tela antes de salvar)
+    setDataList(prev => prev.map(u => u.id === user.id ? { ...u, admin: isPromoting } : u));
 
-        if (!isRoot && !isPromoter) {
-            toast({ 
-                title: "Permissão Negada", 
-                description: "Apenas o administrador que concedeu o acesso pode removê-lo.", 
-                variant: "destructive" 
-            });
-            return;
+    try {
+        if (isPromoting) {
+            // PROMOVENDO
+            const updates = { 
+                admin: true, 
+                promoted_by: currentUser?.id 
+            };
+            await EntityStorage.update('AuthorizedUser', user.id, updates);
+            toast({ title: "Novo Administrador", description: `${user.name} agora é admin (Promovido por você).` });
+        } else {
+            // REBAIXANDO
+            const isRoot = currentUser?.name === 'Marconi Fabian';
+            const isPromoter = user.promoted_by === currentUser?.id;
+
+            if (!isRoot && !isPromoter) {
+                setDataList(previousList); // Reverte a tela
+                toast({ 
+                    title: "Permissão Negada", 
+                    description: "Apenas o administrador que concedeu o acesso pode removê-lo.", 
+                    variant: "destructive" 
+                });
+                return;
+            }
+
+            const updates = { 
+                admin: false, 
+                promoted_by: null 
+            };
+            await EntityStorage.update('AuthorizedUser', user.id, updates);
+            toast({ title: "Administrador Removido", description: `${user.name} voltou a ser usuário comum.` });
         }
+        
+        // REFRESH IMPORTANTE: Recarrega do banco para garantir que salvou de verdade
+        await refreshData();
 
-        const updates = { 
-            admin: false, 
-            promoted_by: null // Limpa o rastro
-        };
-        setDataList(prev => prev.map(u => u.id === user.id ? { ...u, ...updates } : u));
-        await EntityStorage.update('AuthorizedUser', user.id, updates);
-        toast({ title: "Administrador Removido", description: `${user.name} voltou a ser usuário comum.` });
+    } catch (error) {
+        console.error("Erro ao alterar admin:", error);
+        setDataList(previousList); // Reverte a tela em caso de erro
+        toast({ title: "Erro ao Salvar", description: "Não foi possível persistir a alteração. Verifique sua conexão.", variant: "destructive" });
     }
   };
 

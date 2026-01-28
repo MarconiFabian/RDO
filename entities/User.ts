@@ -66,7 +66,8 @@ export class User {
       return { success: false, message: "Nome ou senha incorretos." };
     }
 
-    const isAdmin = user.name === 'Marconi Fabian' || user.name === 'Alexsandro Gabriel' || user.admin === true;
+    // LÓGICA DE ADMIN SIMPLIFICADA: Respeita apenas o banco de dados e o Mestre.
+    const isAdmin = user.name === 'Marconi Fabian' || user.admin === true;
 
     if (user.status === 'pending' && !isAdmin) {
       return { success: false, message: "Seu cadastro aguarda aprovação do gestor." };
