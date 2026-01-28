@@ -17,16 +17,12 @@ const ensureSystemAccess = async () => {
 
     const users = await EntityStorage.list<any>('AuthorizedUser');
     
+    // Lista de usuários que o sistema OBRIGA a existir.
+    // Removemos o Alexsandro daqui para que ele possa ser excluído permanentemente.
     const systemUsers = [
       {
         name: "Marconi Fabian",
         registration: "001",
-        password: "admin",
-        isAdmin: true
-      },
-      {
-        name: "Alexsandro Gabriel",
-        registration: "002",
         password: "admin",
         isAdmin: true
       }

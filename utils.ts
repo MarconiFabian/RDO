@@ -18,8 +18,7 @@ export const getQueryParams = () => {
 
 // Configurações Globais do Sistema
 export const SYSTEM_CONFIG = {
-  // Substitua este link pelo link direto da logo da sua empresa hospedada na internet (Imgur, site da empresa, etc)
-  // Usei um ícone de Capacete de Obra como padrão profissional.
-  defaultLogo: "https://cdn-icons-png.flaticon.com/512/1598/1598196.png",
+  // Agora aponta para o arquivo local na pasta public
+  defaultLogo: "/logo.png",
   appName: "RDO Online"
 };
