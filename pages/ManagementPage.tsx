@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button';
 import { 
   Shield, Trash2, ArrowLeft, Users, Wrench, List, Package, FileText, 
   Power, PowerOff, Download, Plus,
-  Database, ImageIcon, Upload, RefreshCcw, User as UserIcon, ShieldAlert, Cloud
+  Database, ImageIcon, Upload, RefreshCcw, User as UserIcon, ShieldAlert, Cloud, Info
 } from 'lucide-react';
 import { createPageUrl, cn, SYSTEM_CONFIG } from '../utils';
 import { useToast } from '../components/ui/use-toast';
@@ -62,6 +62,18 @@ export function ManagementPage() {
 
     const entity = getEntityName(activeTab);
     const items = await EntityStorage.list<any>(entity);
+    
+    // Ordenação inteligente: Admin primeiro, depois alfabético
+    if (activeTab === 'users') {
+        items.sort((a, b) => {
+            if (a.name === 'Marconi Fabian') return -1;
+            if (b.name === 'Marconi Fabian') return 1;
+            if (a.admin && !b.admin) return -1;
+            if (!a.admin && b.admin) return 1;
+            return a.name.localeCompare(b.name);
+        });
+    }
+
     setDataList(items);
     setLoadingData(false);
     
@@ -126,37 +138,56 @@ export function ManagementPage() {
     }
   };
 
-  // --- LÓGICA DE EXCLUSÃO (HIERARQUIA) ---
+  // --- HIERARQUIA DE PERMISSÃO ---
+  // Retorna TRUE se o currentUser pode gerenciar o targetUser
+  const canManageUser = (target: any) => {
+    if (!currentUser) return false;
+
+    // 1. O Alvo é o Dono Supremo? NINGUÉM mexe (exceto ele mesmo para editar dados básicos, mas aqui bloqueamos gestão)
+    if (target.name === 'Marconi Fabian') return false;
+
+    // 2. Eu sou o Dono Supremo? Posso tudo.
+    if (currentUser.name === 'Marconi Fabian') return true;
+
+    // 3. Se o alvo for Usuário Comum (não admin), qualquer Admin pode mexer.
+    if (!target.admin) return true;
+
+    // 4. Se o alvo é Admin, regras de hierarquia se aplicam:
+    
+    // A. Regra do Criador (Promoted By) - Vínculo direto
+    if (target.promoted_by && String(target.promoted_by) === String(currentUser.id)) {
+        return true;
+    }
+
+    // B. Regra da Matrícula (Hierarquia Numérica)
+    // Se a matrícula do alvo for MAIOR que a minha, eu sou mais antigo/hierarquicamente superior.
+    // Ex: Eu (01) posso mexer no Alvo (02). O Alvo (02) NÃO pode mexer em mim (01).
+    const myReg = parseInt(currentUser.registration?.replace(/\D/g, '') || '999999');
+    const targetReg = parseInt(target.registration?.replace(/\D/g, '') || '0');
+
+    if (myReg > 0 && targetReg > 0 && myReg < targetReg) {
+        return true;
+    }
+
+    // C. Fallback para Orfãos: Se o admin alvo não tem criador definido e não é o Marconi,
+    // permitimos edição para evitar travamento, mas assumimos o risco.
+    // (Desativado por enquanto para respeitar a regra estrita do usuário, usamos apenas Matrícula como fallback seguro)
+    
+    return false;
+  };
+
   const handleExcluir = async (id: string, nome: string) => {
     if (!id) return;
 
-    // 1. O DONO É INTOCÁVEL
-    if (nome === 'Marconi Fabian') {
-        toast({ title: "Ação Negada", description: "O Dono do sistema não pode ser excluído.", variant: "destructive" });
-        return;
-    }
-
-    const targetUser = dataList.find(i => i.id === id);
-
-    // 2. VERIFICAÇÃO DE HIERARQUIA PARA USUÁRIOS/ADMINS
-    if (activeTab === 'users' && targetUser) {
-        const iAmTheBoss = currentUser?.name === 'Marconi Fabian';
-        
-        // Se o alvo for um Admin
-        if (targetUser.admin) {
-            const hasPromoter = !!targetUser.promoted_by;
-            const iPromotedHim = hasPromoter && (String(targetUser.promoted_by) === String(currentUser?.id));
-            
-            // Só bloqueia se existir um promotor definido E não for você.
-            // Se promoted_by for null (erro de banco), liberamos para qualquer admin resolver (exceto apagar Marconi).
-            if (!iAmTheBoss && hasPromoter && !iPromotedHim) {
-                toast({ 
-                    title: "Hierarquia Insuficiente", 
-                    description: "Este Administrador foi promovido por outra pessoa. Você não pode excluí-lo.", 
-                    variant: "destructive" 
-                });
-                return;
-            }
+    if (activeTab === 'users') {
+        const targetUser = dataList.find(i => i.id === id);
+        if (targetUser && !canManageUser(targetUser)) {
+            toast({ 
+                title: "Permissão Negada", 
+                description: "Hierarquia insuficiente para excluir este Administrador.", 
+                variant: "destructive" 
+            });
+            return;
         }
     }
 
@@ -191,28 +222,15 @@ export function ManagementPage() {
   };
 
   const handleToggleUser = async (user: any) => {
-    if (user.name === 'Marconi Fabian') {
-        toast({ title: "Proibido", description: "O Dono não pode ser bloqueado.", variant: "destructive" });
-        return; 
-    }
-
-    // Regra de Hierarquia também se aplica para Bloquear
-    if (user.admin) {
-        const iAmTheBoss = currentUser?.name === 'Marconi Fabian';
-        const hasPromoter = !!user.promoted_by;
-        const iPromotedHim = hasPromoter && (String(user.promoted_by) === String(currentUser?.id));
-        
-        // Se promoted_by existe e é diferente, bloqueia. Se for null (erro de banco), permite (fallback de usabilidade).
-        if (!iAmTheBoss && hasPromoter && !iPromotedHim) {
-             toast({ title: "Hierarquia", description: "Você não pode bloquear um Admin que não está abaixo de você.", variant: "destructive" });
-             return;
-        }
+    // Verifica permissão
+    if (!canManageUser(user)) {
+         toast({ title: "Permissão Negada", description: "Você não tem hierarquia para bloquear este usuário.", variant: "destructive" });
+         return;
     }
     
     const previousList = [...dataList];
     const newStatus = user.status === 'active' ? 'blocked' : 'active';
     
-    // Atualização Visual (Otimista)
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus, active: newStatus === 'active' } : u));
     
     try {
@@ -221,20 +239,20 @@ export function ManagementPage() {
         await refreshData();
     } catch (error) {
         setDataList(previousList);
-        toast({ title: "Erro", description: "Falha ao salvar status. Tente novamente.", variant: "destructive" });
+        toast({ title: "Erro", description: "Falha ao salvar status.", variant: "destructive" });
     }
   };
 
   const handleToggleAdmin = async (user: any) => {
-    if (user.name === 'Marconi Fabian') {
-        toast({ title: "Ação Proibida", description: "O Dono é o Administrador Supremo.", variant: "destructive" });
+    // Verifica permissão hierárquica ANTES de tentar promover/rebaixar
+    if (!canManageUser(user)) {
+        toast({ title: "Permissão Negada", description: "Você não tem hierarquia sobre este usuário.", variant: "destructive" });
         return;
     }
 
     const isPromoting = !user.admin;
     const previousList = [...dataList];
     
-    // Atualização Visual Imediata (Otimista)
     setDataList(prev => prev.map(u => u.id === user.id ? { ...u, admin: isPromoting } : u));
 
     try {
@@ -248,29 +266,12 @@ export function ManagementPage() {
                 await EntityStorage.update('AuthorizedUser', user.id, updates);
                 toast({ title: "Promovido!", description: `${user.name} agora é Administrador.` });
             } catch (hierarchyError) {
-                // FALLBACK: Se falhar, salva apenas como admin. 
-                // A lógica de bloqueio agora foi relaxada para permitir gerenciar admins "sem padrinho".
                 await EntityStorage.update('AuthorizedUser', user.id, { admin: true });
-                toast({ title: "Promovido!", description: `${user.name} agora é Administrador (Modo Compatibilidade).` });
+                toast({ title: "Promovido!", description: `${user.name} agora é Administrador.` });
             }
 
         } else {
             // === REBAIXANDO ===
-            const iAmTheBoss = currentUser?.name === 'Marconi Fabian';
-            const hasPromoter = !!user.promoted_by;
-            const iPromotedHim = hasPromoter && (String(user.promoted_by) === String(currentUser?.id));
-
-            // Só bloqueia se houver um promotor explícito diferente.
-            if (!iAmTheBoss && hasPromoter && !iPromotedHim) {
-                setDataList(previousList);
-                toast({ 
-                    title: "Hierarquia Bloqueada", 
-                    description: "Você não tem poder para rebaixar este Administrador. Apenas quem o promoveu.", 
-                    variant: "destructive" 
-                });
-                return;
-            }
-
             try {
                 const updates = { admin: false, promoted_by: null };
                 await EntityStorage.update('AuthorizedUser', user.id, updates);
@@ -285,8 +286,8 @@ export function ManagementPage() {
 
     } catch (error) {
         console.error("Erro fatal ao alterar admin:", error);
-        setDataList(previousList); // Rollback visual
-        toast({ title: "Erro Crítico", description: "Não foi possível salvar a alteração no banco de dados.", variant: "destructive" });
+        setDataList(previousList); 
+        toast({ title: "Erro Crítico", description: "Não foi possível salvar a alteração.", variant: "destructive" });
     }
   };
 
@@ -485,95 +486,108 @@ export function ManagementPage() {
                     <p className="text-white font-medium">Nenhum dado encontrado</p>
                 </div>
             ) : (
-                dataList.map((item) => (
-                    <div 
-                        key={item.id} 
-                        className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 flex justify-between items-center group relative overflow-hidden"
-                    >
-                        {activeTab === 'users' && (
-                            <div className="mr-3 shrink-0">
-                                <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
-                                    {item.avatar ? (
-                                        <img src={item.avatar} alt="Avatar" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <UserIcon className="w-5 h-5 text-slate-300" />
+                dataList.map((item) => {
+                    const isAllowed = activeTab === 'users' ? canManageUser(item) : true;
+                    const isMe = item.id === currentUser?.id;
+                    
+                    return (
+                        <div 
+                            key={item.id} 
+                            className={cn(
+                                "bg-white rounded-2xl p-4 shadow-md border border-slate-100 flex justify-between items-center group relative overflow-hidden",
+                                activeTab === 'users' && !isAllowed ? "opacity-75 bg-slate-50" : ""
+                            )}
+                        >
+                            {activeTab === 'users' && (
+                                <div className="mr-3 shrink-0">
+                                    <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
+                                        {item.avatar ? (
+                                            <img src={item.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <UserIcon className="w-5 h-5 text-slate-300" />
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex-1 min-w-0 pr-4">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <h3 className="font-bold text-[#0f2441] truncate text-sm">
+                                        {activeTab === 'reports' ? `OM: ${item.om_number}` : (item.name || item.email)}
+                                    </h3>
+                                    {activeTab === 'users' && (item.admin || item.name === 'Marconi Fabian') && (
+                                        <Shield className="w-3.5 h-3.5 text-blue-600 fill-blue-100" />
+                                    )}
+                                </div>
+                                
+                                <div className="flex flex-col text-[10px] text-slate-400 font-medium">
+                                    {activeTab === 'users' && <span className="truncate">Matrícula: {item.registration}</span>}
+                                    {activeTab === 'reports' && (
+                                        <span>{safeFormatDate(item.date)} • {item.activity_location}</span>
+                                    )}
+                                    {activeTab === 'users' && (
+                                        <span className={item.status === 'active' ? 'text-green-600' : 'text-amber-500'}>
+                                            {item.status === 'active' ? '● Ativo' : '● Pendente/Bloqueado'}
+                                        </span>
                                     )}
                                 </div>
                             </div>
-                        )}
 
-                        <div className="flex-1 min-w-0 pr-4">
-                            <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-bold text-[#0f2441] truncate text-sm">
-                                    {activeTab === 'reports' ? `OM: ${item.om_number}` : (item.name || item.email)}
-                                </h3>
-                                {activeTab === 'users' && (item.admin || item.name === 'Marconi Fabian') && (
-                                    <Shield className="w-3.5 h-3.5 text-blue-600 fill-blue-100" />
+                            <div className="flex items-center gap-2">
+                                {/* Botões de Ação para Usuários */}
+                                {activeTab === 'users' && !isMe && (
+                                    <>
+                                        {/* Botão Tornar Admin */}
+                                        <button
+                                            onClick={() => handleToggleAdmin(item)}
+                                            className={cn(
+                                                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                                item.admin
+                                                    ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                                                    : "bg-slate-100 text-slate-400 hover:bg-slate-200",
+                                                !isAllowed && "opacity-30 cursor-not-allowed"
+                                            )}
+                                            disabled={!isAllowed}
+                                            title={!isAllowed ? "Sem permissão hierárquica" : (item.admin ? "Remover Admin" : "Tornar Admin")}
+                                        >
+                                            <Shield className="w-4 h-4" />
+                                        </button>
+
+                                        {/* Botão Ativar/Bloquear */}
+                                        <button 
+                                            onClick={() => handleToggleUser(item)}
+                                            className={cn(
+                                                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                                item.status === 'active' 
+                                                    ? "bg-green-100 text-green-600 hover:bg-green-200" 
+                                                    : "bg-amber-100 text-amber-600 hover:bg-amber-200",
+                                                !isAllowed && "opacity-30 cursor-not-allowed"
+                                            )}
+                                            disabled={!isAllowed}
+                                            title={!isAllowed ? "Sem permissão hierárquica" : (item.status === 'active' ? "Bloquear" : "Ativar")}
+                                        >
+                                            {item.status === 'active' ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+                                        </button>
+                                    </>
                                 )}
-                            </div>
-                            
-                            <div className="flex flex-col text-[10px] text-slate-400 font-medium">
-                                {activeTab === 'users' && <span className="truncate">Matrícula: {item.registration}</span>}
-                                {activeTab === 'reports' && (
-                                    <span>{safeFormatDate(item.date)} • {item.activity_location}</span>
-                                )}
-                                {activeTab === 'users' && (
-                                    <span className={item.status === 'active' ? 'text-green-600' : 'text-amber-500'}>
-                                        {item.status === 'active' ? '● Ativo' : '● Pendente/Bloqueado'}
-                                    </span>
-                                )}
+                                
+                                <button 
+                                    onClick={() => handleExcluir(item.id, item.name || item.om_number)}
+                                    className={cn(
+                                        "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                        (activeTab === 'users' && (!isAllowed || isMe))
+                                            ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+                                            : "bg-red-50 text-red-500 hover:bg-red-100"
+                                    )}
+                                    disabled={activeTab === 'users' && (!isAllowed || isMe)}
+                                    title={activeTab === 'users' && !isAllowed ? "Sem permissão hierárquica" : "Excluir"}
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
                             </div>
                         </div>
-
-                        <div className="flex items-center gap-2">
-                            {/* Botões de Ação para Usuários */}
-                            {activeTab === 'users' && item.name !== 'Marconi Fabian' && (
-                                <>
-                                    {/* Botão Tornar Admin */}
-                                    <button
-                                        onClick={() => handleToggleAdmin(item)}
-                                        className={cn(
-                                            "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                                            item.admin
-                                                ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
-                                                : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                                        )}
-                                        title={item.admin ? "Remover Admin" : "Tornar Admin"}
-                                    >
-                                        <Shield className="w-4 h-4" />
-                                    </button>
-
-                                    {/* Botão Ativar/Bloquear */}
-                                    <button 
-                                        onClick={() => handleToggleUser(item)}
-                                        className={cn(
-                                            "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                                            item.status === 'active' 
-                                                ? "bg-green-100 text-green-600 hover:bg-green-200" 
-                                                : "bg-amber-100 text-amber-600 hover:bg-amber-200"
-                                        )}
-                                        title={item.status === 'active' ? "Bloquear" : "Ativar"}
-                                    >
-                                        {item.status === 'active' ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
-                                    </button>
-                                </>
-                            )}
-                            
-                            <button 
-                                onClick={() => handleExcluir(item.id, item.name || item.om_number)}
-                                className={cn(
-                                    "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                                    (item.name === 'Marconi Fabian' && activeTab === 'users')
-                                        ? "bg-slate-100 text-slate-300 cursor-not-allowed"
-                                        : "bg-red-50 text-red-500 hover:bg-red-100"
-                                )}
-                                disabled={item.name === 'Marconi Fabian' && activeTab === 'users'}
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
-                ))
+                    );
+                })
             )}
         </div>
 
