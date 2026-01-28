@@ -16,17 +16,56 @@ export class User {
   }
 
   static async login(name: string, password: string): Promise<{ success: boolean; message: string; user?: any }> {
-    // AGORA USAMOS AWAIT
+    // Busca usuários do banco (Online ou Local)
     const users = await EntityStorage.list<any>('AuthorizedUser');
     
-    // Busca por Nome (case insensitive) e Senha
+    // --- SEGURANÇA MESTRA ---
+    // Garante acesso ao Super Admin mesmo se o banco estiver vazio ou com erro de conexão
+    if (name === 'Marconi Fabian' && password === 'admin') {
+        const dbUser = users.find(u => u.name === name);
+        
+        const sessionUser = {
+            id: dbUser?.id || 'master-admin-id', // Usa o ID do banco se existir, senão usa um fixo
+            email: 'marconi@rdo.sys', 
+            name: 'Marconi Fabian', 
+            full_name: 'Marconi Fabian',
+            registration: '001',
+            admin: true,
+            avatar: dbUser?.avatar // Recupera avatar se já tiver salvo no banco
+        };
+
+        localStorage.setItem('currentUser', JSON.stringify(sessionUser));
+        
+        // Se o usuário não existia no banco ainda, vamos forçar a criação agora para garantir persistência futura
+        if (!dbUser) {
+             try {
+                 await EntityStorage.create('AuthorizedUser', { 
+                    email: 'marconi@rdo.sys',
+                    name: 'Marconi Fabian', 
+                    password: 'admin', 
+                    registration: '001',
+                    active: true, 
+                    status: 'active',
+                    access_level: 'admin',
+                    admin: true
+                 });
+             } catch (e) {
+                 console.error("Tentativa de criar admin no background falhou, mas login foi permitido.", e);
+             }
+        }
+
+        return { success: true, message: "Acesso de Super Admin concedido (Modo de Segurança).", user: sessionUser };
+    }
+    // ------------------------
+
+    // Busca por Nome (case insensitive) e Senha para usuários normais
     const user = users.find(u => u.name.trim().toLowerCase() === name.trim().toLowerCase() && u.password === password);
 
     if (!user) {
       return { success: false, message: "Nome ou senha incorretos." };
     }
 
-    // Verifica status (Marconi Fabian sempre passa)
+    // Verifica status
     const isAdmin = user.name === 'Marconi Fabian' || user.name === 'Alexsandro Gabriel';
 
     if (user.status === 'pending' && !isAdmin) {
