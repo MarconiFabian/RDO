@@ -1,11 +1,11 @@
 
 const CACHE_NAME = 'rdo-online-v1';
 const urlsToCache = [
-  './',
-  './index.html',
+  '/',
+  '/index.html',
   'https://cdn.tailwindcss.com',
-  'https://esm.sh/react@^19.2.3',
-  'https://esm.sh/react-dom@^19.2.3'
+  'https://esm.sh/react@^19.2.4',
+  'https://esm.sh/react-dom@^19.2.4'
 ];
 
 self.addEventListener('install', event => {

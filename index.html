@@ -3,11 +3,11 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
     <title>RDO Online</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="./manifest.json">
+    <link rel="manifest" href="/manifest.json">
 
     <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,11 +17,11 @@
     <meta name="application-name" content="RDO Online">
     <meta name="theme-color" content="#0f2441">
     
-    <!-- Icons (Troque o link abaixo pela URL da sua imagem) -->
+    <!-- Icons -->
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1598/1598196.png">
     <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/1598/1598196.png">
 
-    <!-- Tailwind CSS (CDN mantido para simplicidade do layout existente) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       @keyframes spin {
@@ -36,6 +36,10 @@
       .no-scrollbar {
         -ms-overflow-style: none;
         scrollbar-width: none;
+      }
+      /* Previne o 'bounce' no iOS que revela o fundo branco */
+      body {
+        overscroll-behavior-y: none;
       }
     </style>
 <script type="importmap">
@@ -66,7 +70,7 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-          navigator.serviceWorker.register('./service-worker.js').then(function(registration) {
+          navigator.serviceWorker.register('/service-worker.js').then(function(registration) {
             console.log('ServiceWorker registration successful');
           }, function(err) {
             console.log('ServiceWorker registration failed: ', err);
