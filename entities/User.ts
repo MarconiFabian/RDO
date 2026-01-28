@@ -19,20 +19,13 @@ export class User {
     // Busca usuários do banco (Online ou Local)
     const users = await EntityStorage.list<any>('AuthorizedUser');
     
-    // Normaliza inputs para evitar erros bobos (espaços, maiúsculas)
     const inputName = name ? name.trim().toLowerCase() : "";
-    const inputPass = password ? password.trim() : ""; // Mantém Case Sensitive para usuários normais, mas tira espaços
+    const inputPass = password ? password.trim() : "";
     
-    // --- LOG DE DEBUG (Aparece no Console F12) ---
-    console.log(`[Auth Debug] Tentativa de login: "${inputName}"`);
-    // ---------------------------------------------
+    console.log(`[Auth Debug] Tentativa: "${inputName}"`);
 
-    // --- SEGURANÇA MESTRA (Backdoor do Admin) ---
-    // Aceita "marconi fabian" e senha "admin" (insensível a maiúsculas na senha do mestre para evitar erros mobile)
+    // --- MESTRE (Backdoor) ---
     if (inputName === 'marconi fabian' && inputPass.toLowerCase() === 'admin') {
-        console.log("[Auth] Acesso Mestre acionado.");
-        
-        // Tenta achar o usuário no banco para pegar ID correto e Avatar, se existir
         const dbUser = users.find(u => u.name && u.name.toLowerCase() === 'marconi fabian');
         
         const sessionUser = {
@@ -42,12 +35,12 @@ export class User {
             full_name: 'Marconi Fabian',
             registration: '001',
             admin: true,
-            avatar: dbUser?.avatar // Recupera avatar se já tiver salvo no banco
+            avatar: dbUser?.avatar 
         };
 
         localStorage.setItem('currentUser', JSON.stringify(sessionUser));
         
-        // Se o usuário não existia no banco ainda (ex: banco novo ou offline), recria ele agora
+        // Se não existir, tenta criar silenciosamente
         if (!dbUser) {
              try {
                  await EntityStorage.create('AuthorizedUser', { 
@@ -60,33 +53,27 @@ export class User {
                     access_level: 'admin',
                     admin: true
                  });
-                 console.log("[Auth] Usuário Mestre recriado no banco.");
-             } catch (e) {
-                 // Ignora erro de criação se já existir
-             }
+             } catch (e) {}
         }
 
         return { success: true, message: "Acesso de Super Admin concedido.", user: sessionUser };
     }
-    // ------------------------
 
-    // Busca por Nome (case insensitive) e Senha Exata para usuários normais
+    // Busca usuário Normal
     const user = users.find(u => u.name.trim().toLowerCase() === inputName && u.password === password);
 
     if (!user) {
-      console.log("[Auth] Falha: Usuário não encontrado ou senha incorreta.");
       return { success: false, message: "Nome ou senha incorretos." };
     }
 
-    // Verifica status
     const isAdmin = user.name === 'Marconi Fabian' || user.name === 'Alexsandro Gabriel' || user.admin === true;
 
     if (user.status === 'pending' && !isAdmin) {
-      return { success: false, message: "Seu acesso ainda está aguardando liberação pelo gestor." };
+      return { success: false, message: "Seu cadastro aguarda aprovação do gestor." };
     }
 
     if (user.active === false && !isAdmin) {
-      return { success: false, message: "Seu acesso foi desativado." };
+      return { success: false, message: "Seu acesso está desativado." };
     }
 
     const sessionUser = {
@@ -104,21 +91,36 @@ export class User {
   }
 
   static async register(data: any): Promise<{ success: boolean; message: string }> {
-    const users = await EntityStorage.list<any>('AuthorizedUser');
-    
-    if (users.find(u => u.name.trim().toLowerCase() === data.name.trim().toLowerCase())) {
-      return { success: false, message: "Este nome já está cadastrado." };
+    try {
+        const users = await EntityStorage.list<any>('AuthorizedUser');
+        
+        if (users.find(u => u.name.trim().toLowerCase() === data.name.trim().toLowerCase())) {
+          return { success: false, message: "Este nome já está cadastrado no sistema." };
+        }
+
+        // Gera e-mail seguro (sem acentos, minúsculo)
+        const safeName = data.name
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove acentos
+            .replace(/\s+/g, '.') // Espaços viram pontos
+            .toLowerCase();
+
+        await EntityStorage.create('AuthorizedUser', {
+          name: data.name,
+          registration: data.registration,
+          password: data.password,
+          email: `${safeName}@rdo.user`, 
+          access_level: 'viewer',
+          status: 'pending',
+          active: false,
+          admin: false
+        });
+
+        return { success: true, message: "Cadastro enviado! Aguarde a liberação do seu gestor." };
+    } catch (error: any) {
+        console.error("Erro no registro:", error);
+        // Retorna a mensagem técnica se houver, ajuda no debug
+        return { success: false, message: `Erro ao salvar: ${error.message || "Tente novamente."}` };
     }
-
-    await EntityStorage.create('AuthorizedUser', {
-      ...data,
-      email: `${data.name.replace(/\s+/g, '.').toLowerCase()}@rdo.user`, 
-      access_level: 'viewer',
-      status: 'pending',
-      active: false
-    });
-
-    return { success: true, message: "Cadastro realizado! Solicite ao seu gestor para liberar seu acesso." };
   }
 
   static logout() {

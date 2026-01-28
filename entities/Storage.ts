@@ -13,7 +13,6 @@ const getEnv = (key: string) => {
 };
 
 // Configuração do Cliente Supabase
-// Se as variáveis não existirem (ex: rodando local sem setup), ele fica nulo e usamos LocalStorage
 const supabaseUrl = getEnv('VITE_SUPABASE_URL');
 const supabaseKey = getEnv('VITE_SUPABASE_KEY');
 
@@ -40,7 +39,7 @@ export class EntityStorage {
     return !!supabase;
   }
   
-  // Lista todos os itens (Agora é 100% Async)
+  // Lista todos os itens
   static async list<T>(entityName: string): Promise<T[]> {
     // Modo Online (Supabase)
     if (supabase) {
@@ -48,8 +47,7 @@ export class EntityStorage {
       try {
         const { data, error } = await supabase.from(tableName).select('*');
         if (error) {
-          // Se der erro (ex: tabela não existe), retornamos array vazio mas logamos o erro
-          console.warn(`Supabase Warning (${entityName}): Verifique se a tabela '${tableName}' foi criada no banco.`, error.message);
+          console.warn(`Supabase Warning (${entityName}):`, error.message);
           return [];
         }
         return data as T[];
@@ -95,28 +93,39 @@ export class EntityStorage {
   }
 
   static async create<T>(entityName: string, data: any): Promise<T> {
-    const newItem = {
-      ...data,
-      // Se for Supabase, deixamos ele gerar o ID (ou geramos UUID se necessário), 
-      // mas para compatibilidade mantemos geração de string ID se não vier
-      id: data.id || Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-      created_at: new Date().toISOString()
-    };
-
+    // CORREÇÃO CRÍTICA: Lógica separada para Supabase e LocalStorage
+    
+    // 1. Modo Online (Supabase)
     if (supabase) {
       const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
-      const { data: created, error } = await supabase.from(tableName).insert([newItem]).select().single();
+      
+      // NÃO enviamos 'id' manual se ele não existir no data. 
+      // Deixamos o Postgres gerar o UUID/Serial automaticamente para evitar erro de tipo.
+      const payload = {
+        ...data,
+        created_at: new Date().toISOString()
+      };
+
+      const { data: created, error } = await supabase.from(tableName).insert([payload]).select().single();
       
       if (error) {
         console.error("Erro ao criar no Supabase:", error);
-        throw error;
+        // Lançamos o erro para ser pego pelo User.ts e mostrado no Toast
+        throw new Error(error.message || "Erro ao salvar no banco de dados");
       }
       
       window.dispatchEvent(new Event('storage-updated'));
       return created as T;
     }
 
-    // LocalStorage Logic
+    // 2. Modo Offline (LocalStorage)
+    // Aqui PRECISAMOS gerar um ID manual pois não tem banco para fazer isso
+    const newItem = {
+      ...data,
+      id: data.id || Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+      created_at: new Date().toISOString()
+    };
+
     const items = await this.list<any>(entityName);
     items.push(newItem);
     localStorage.setItem(entityName, JSON.stringify(items));
