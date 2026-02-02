@@ -4,10 +4,11 @@ import { DailyReport } from '../entities/DailyReport';
 import { User } from '../entities/User';
 import { EntityStorage } from '../entities/Storage';
 import { GlobalSettings } from '../entities/GlobalSettings';
+import { SystemNotice } from '../entities/SystemNotice'; // Novo Import
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
 import { 
-  FileText, Search, Plus, Users, BarChart3, ClipboardList, Bell, Shield, ImageIcon, UserPlus, LogOut, Camera, User as UserIcon, Settings, Wrench
+  FileText, Search, Plus, Users, BarChart3, ClipboardList, Bell, Shield, ImageIcon, UserPlus, LogOut, Camera, User as UserIcon, Settings, Wrench, ChevronRight
 } from "lucide-react";
 import { createPageUrl, cn, SYSTEM_CONFIG } from '../utils';
 import { useToast } from "../components/ui/use-toast";
@@ -24,6 +25,7 @@ export function ReportsPage() {
   const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
   
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   
   const { toast } = useToast();
   
@@ -66,11 +68,31 @@ export function ReportsPage() {
       setReports(visible);
       setFilteredReports(visible);
 
+      // --- SISTEMA DE NOTIFICAÇÕES ---
       const notifs = [];
+      let count = 0;
+
+      // 1. Avisos do Sistema (SystemNotice)
+      const notices = await SystemNotice.list();
+      const myNotices = notices.filter((n: any) => n.target_user_id === userData.id || n.is_team);
+      const unreadNotices = myNotices.filter((n: any) => !n.read_by?.some((r: any) => r.user_id === userData.id));
       
+      if (unreadNotices.length > 0) {
+        count += unreadNotices.length;
+        notifs.push({
+            id: 'system-notices',
+            title: 'Novos Comunicados',
+            description: `Você tem ${unreadNotices.length} aviso(s) importante(s).`,
+            type: 'alert',
+            link: 'Notifications'
+        });
+      }
+
+      // 2. Aprovações Pendentes (Apenas Admin)
       if (adminStatus) {
          const pending = allUsers.filter(u => u.status === 'pending');
          if (pending.length > 0) {
+            count += pending.length;
             notifs.push({
                 id: 'pending-users',
                 title: 'Aprovações Pendentes',
@@ -81,14 +103,18 @@ export function ReportsPage() {
          }
       }
 
-      notifs.push({
-         id: 'welcome',
-         title: 'Bem-vindo ao RDO Online',
-         description: 'Sistema pronto para uso.',
-         type: 'info'
-      });
+      // 3. Welcome (Se não tiver nada importante)
+      if (notifs.length === 0) {
+        notifs.push({
+            id: 'welcome',
+            title: 'Tudo em dia!',
+            description: 'Nenhuma pendência encontrada.',
+            type: 'info'
+        });
+      }
 
       setNotifications(notifs);
+      setUnreadCount(count);
 
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
@@ -238,15 +264,15 @@ export function ReportsPage() {
                     <PopoverTrigger>
                         <div className="relative p-2 text-white/70 hover:text-white transition-colors cursor-pointer bg-white/5 rounded-xl hover:bg-white/10">
                             <Bell className="w-5 h-5" />
-                            {notifications.length > 0 && (
-                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-[#0f2441]"></span>
+                            {unreadCount > 0 && (
+                                <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-[#0f2441] animate-bounce"></span>
                             )}
                         </div>
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-[280px] sm:w-80 p-0 bg-white border-slate-200 shadow-xl rounded-xl overflow-hidden max-w-[calc(100vw-2rem)]">
                         <div className="bg-slate-50 p-3 border-b border-slate-100 flex justify-between items-center">
-                            <span className="text-xs font-bold text-[#0f2441] uppercase">Notificações</span>
-                            <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded font-black">{notifications.length}</span>
+                            <span className="text-xs font-bold text-[#0f2441] uppercase">Central de Avisos</span>
+                            {unreadCount > 0 && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 rounded-full font-black">{unreadCount}</span>}
                         </div>
                         <div className="max-h-64 overflow-y-auto">
                             {notifications.length === 0 ? (
@@ -259,10 +285,11 @@ export function ReportsPage() {
                                         key={n.id} 
                                         className={cn(
                                             "p-3 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-default",
-                                            n.type === 'action' ? "cursor-pointer bg-blue-50/30" : ""
+                                            (n.type === 'action' || n.type === 'alert') ? "cursor-pointer" : "",
+                                            n.type === 'alert' ? "bg-amber-50/50" : ""
                                         )}
                                         onClick={() => {
-                                            if (n.type === 'action' && n.link) {
+                                            if (n.link) {
                                                 if (n.link === 'Management') {
                                                     window.location.hash = '#/Management';
                                                 } else {
@@ -275,6 +302,10 @@ export function ReportsPage() {
                                             {n.id === 'pending-users' ? (
                                                 <div className="bg-amber-100 text-amber-600 p-1.5 rounded-full mt-0.5">
                                                     <UserPlus className="w-3.5 h-3.5" />
+                                                </div>
+                                            ) : n.type === 'alert' ? (
+                                                <div className="bg-amber-100 text-amber-600 p-1.5 rounded-full mt-0.5 animate-pulse">
+                                                    <Bell className="w-3.5 h-3.5" />
                                                 </div>
                                             ) : (
                                                 <div className="bg-slate-100 text-slate-500 p-1.5 rounded-full mt-0.5">
@@ -289,6 +320,15 @@ export function ReportsPage() {
                                     </div>
                                 ))
                             )}
+                        </div>
+                        {/* Rodapé do Popover */}
+                        <div className="p-2 bg-slate-50 border-t border-slate-100 text-center">
+                            <button 
+                                onClick={() => window.location.hash = createPageUrl('Notifications')}
+                                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase flex items-center justify-center gap-1 w-full py-1"
+                            >
+                                Ver Histórico Completo <ChevronRight className="w-3 h-3" />
+                            </button>
                         </div>
                     </PopoverContent>
                 </Popover>

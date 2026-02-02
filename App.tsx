@@ -7,11 +7,13 @@ import { ManagementPage } from './pages/ManagementPage';
 import { AnalysisPage } from './pages/AnalysisPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 import { TeamTemplatePage } from './pages/TeamTemplatePage';
+import { NotificationsPage } from './pages/NotificationsPage'; // Novo Import
 import { LoginPage } from './pages/LoginPage';
 import { Toaster } from './components/ui/use-toast';
 import { User } from './entities/User';
 import { EntityStorage } from './entities/Storage';
 import { Wifi, WifiOff } from 'lucide-react';
+import { NoticeModal } from './components/notices/NoticeModal'; 
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.hash || '#/');
@@ -52,12 +54,10 @@ export default function App() {
   const renderPage = () => {
     const hash = currentPath.split('?')[0];
     
-    // Se não estiver logado, vai para Login
     if (!currentUser) {
       return <LoginPage />;
     }
 
-    // Bloqueio de Segurança - Admin Check
     const isAdmin = currentUser.name === 'Marconi Fabian' || currentUser.admin === true;
 
     if (hash === '#/Management') {
@@ -73,16 +73,20 @@ export default function App() {
     if (hash === '#/DailyReport') return <DailyReportPage />;
     if (hash === '#/Resources') return <ResourcesPage />;
     if (hash === '#/TeamTemplate') return <TeamTemplatePage />;
+    if (hash === '#/Notifications') return <NotificationsPage />; // Nova Rota
     
     return <HomePage />;
   };
 
   return (
     <div className="min-h-screen bg-[#0f2441] font-sans antialiased text-slate-900 overflow-x-hidden selection:bg-sky-200">
+      
+      {/* Sistema de Notificações Prioritárias (Bloqueia a tela se houver aviso não lido) */}
+      <NoticeModal />
+
       {renderPage()}
       <Toaster />
 
-      {/* Connection Status Indicator */}
       {currentUser && (
         <div className={`fixed bottom-2 left-2 px-2 py-1 rounded-full flex items-center gap-1.5 text-[9px] font-bold z-50 pointer-events-none opacity-60 ${isOnlineStorage ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'}`}>
            {isOnlineStorage ? (
