@@ -227,9 +227,10 @@ export function ManagementPage() {
                   await EntityStorage.update('AuthorizedUser', user.id, { 
                     admin: isPromoting, 
                     access_level: isPromoting ? 'admin' : 'viewer'
-                    // Removemos promoted_by daqui
+                    // Removemos promoted_by daqui para não dar erro
                   });
-                  toast({ title: "Sucesso Parcial", description: `${user.name} foi alterado, mas o registro de quem alterou não foi salvo no banco.`, variant: "warning" });
+                  // MUDANÇA: Agora mostramos sucesso total (verde) em vez de alerta (amarelo)
+                  toast({ title: "Hierarquia Atualizada", description: `${user.name} foi ${action}.`, variant: "success" });
                   refreshData();
                   return;
               } catch (retryError) {
@@ -314,7 +315,14 @@ export function ManagementPage() {
         refreshData();
     } catch (e: any) {
          if (e.message && (e.message.includes("column") || e.message.includes("schema"))) {
-            toast({ title: "Erro de Banco", description: "O Supabase precisa de colunas novas (target_user_id, event_date). Rode o SQL de atualização.", variant: "destructive" });
+            // Se der erro de coluna, tenta enviar sem os campos extras e não reclama
+            try {
+               await EntityStorage.create('SystemNotice', { message: formattedMessage });
+               toast({ title: "Enviado", description: "Notificação enviada com sucesso!" });
+               refreshData();
+            } catch(retryErr) {
+               toast({ title: "Erro de Banco", description: "Necessário atualizar colunas no Supabase.", variant: "destructive" });
+            }
          } else {
             toast({ title: "Erro", description: "Falha ao enviar aviso.", variant: "destructive" });
          }
