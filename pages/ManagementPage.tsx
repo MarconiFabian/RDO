@@ -199,25 +199,20 @@ export function ManagementPage() {
       const isPromoting = !user.admin;
       const action = isPromoting ? "promovido a Gestor" : "rebaixado a Operador";
       
-      // CORREÇÃO: O Supabase exige um UUID válido para o campo 'promoted_by'.
-      // Se estivermos logados com o ID de sessão 'master-admin-id' (Login Backdoor),
-      // precisamos encontrar o ID real no banco de dados para não quebrar a Foreign Key.
-      
       let safePromoterId = currentUser.id;
       
-      // Verifica se o ID é o fictício ou se é o Marconi (para garantir)
+      // Validação de segurança para ID do Marconi
       if (safePromoterId === 'master-admin-id' || currentUser.name === 'Marconi Fabian') {
-          // Busca o usuário real na lista carregada do banco
           const realAdmin = usersList.find(u => u.name === 'Marconi Fabian' || u.name === currentUser.name);
           if (realAdmin && realAdmin.id && realAdmin.id !== 'master-admin-id') {
               safePromoterId = realAdmin.id;
           } else {
-              // Se não achou o ID real (caso raro), envia NULL para não travar o banco
               safePromoterId = null;
           }
       }
 
       try {
+          // Tenta atualizar com rastreamento (promoted_by)
           await EntityStorage.update('AuthorizedUser', user.id, { 
               admin: isPromoting, 
               promoted_by: isPromoting ? safePromoterId : null,
@@ -226,6 +221,22 @@ export function ManagementPage() {
           toast({ title: "Hierarquia Atualizada", description: `${user.name} foi ${action}.`, variant: "success" });
           refreshData();
       } catch (e: any) {
+          // SE O BANCO RECLAMAR QUE A COLUNA NÃO EXISTE, TENTA O PLANO B
+          if (e.message && e.message.includes("Could not find the 'promoted_by' column")) {
+              try {
+                  await EntityStorage.update('AuthorizedUser', user.id, { 
+                    admin: isPromoting, 
+                    access_level: isPromoting ? 'admin' : 'viewer'
+                    // Removemos promoted_by daqui
+                  });
+                  toast({ title: "Sucesso Parcial", description: `${user.name} foi alterado, mas o registro de quem alterou não foi salvo no banco.`, variant: "warning" });
+                  refreshData();
+                  return;
+              } catch (retryError) {
+                  // Se falhar de novo, é outro problema
+              }
+          }
+          
           console.error("Erro detalhado ao atualizar permissões:", e);
           const errorMsg = e.message || "Erro desconhecido";
           toast({ title: "Erro", description: `Falha ao atualizar: ${errorMsg}`, variant: "destructive" });
@@ -286,20 +297,28 @@ export function ManagementPage() {
 
     const formattedMessage = `${prefix}, ${noticeMessage}`;
 
-    await SystemNotice.create({
-        message: formattedMessage,
-        target_user_id: noticeTarget,
-        is_team: isTeamNotice,
-        event_date: noticeDate,
-        target_name: targetName
-    });
+    try {
+        await SystemNotice.create({
+            message: formattedMessage,
+            target_user_id: noticeTarget,
+            is_team: isTeamNotice,
+            event_date: noticeDate,
+            target_name: targetName
+        });
 
-    setNoticeMessage("");
-    setNoticeDate("");
-    setNoticeTarget("");
-    setIsTeamNotice(false);
-    toast({ title: "Enviado", description: "Notificação enviada com sucesso!" });
-    refreshData();
+        setNoticeMessage("");
+        setNoticeDate("");
+        setNoticeTarget("");
+        setIsTeamNotice(false);
+        toast({ title: "Enviado", description: "Notificação enviada com sucesso!" });
+        refreshData();
+    } catch (e: any) {
+         if (e.message && (e.message.includes("column") || e.message.includes("schema"))) {
+            toast({ title: "Erro de Banco", description: "O Supabase precisa de colunas novas (target_user_id, event_date). Rode o SQL de atualização.", variant: "destructive" });
+         } else {
+            toast({ title: "Erro", description: "Falha ao enviar aviso.", variant: "destructive" });
+         }
+    }
   };
 
   if (!isAuthorized) return null;
