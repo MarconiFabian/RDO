@@ -23,7 +23,7 @@ const ensureSystemAccess = async () => {
       {
         name: "Marconi Fabian",
         registration: "001",
-        password: "admin",
+        password: "29052008",
         isAdmin: true
       }
     ];
