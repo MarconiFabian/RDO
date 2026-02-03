@@ -199,16 +199,36 @@ export function ManagementPage() {
       const isPromoting = !user.admin;
       const action = isPromoting ? "promovido a Gestor" : "rebaixado a Operador";
       
+      // CORREÇÃO: O Supabase exige um UUID válido para o campo 'promoted_by'.
+      // Se estivermos logados com o ID de sessão 'master-admin-id' (Login Backdoor),
+      // precisamos encontrar o ID real no banco de dados para não quebrar a Foreign Key.
+      
+      let safePromoterId = currentUser.id;
+      
+      // Verifica se o ID é o fictício ou se é o Marconi (para garantir)
+      if (safePromoterId === 'master-admin-id' || currentUser.name === 'Marconi Fabian') {
+          // Busca o usuário real na lista carregada do banco
+          const realAdmin = usersList.find(u => u.name === 'Marconi Fabian' || u.name === currentUser.name);
+          if (realAdmin && realAdmin.id && realAdmin.id !== 'master-admin-id') {
+              safePromoterId = realAdmin.id;
+          } else {
+              // Se não achou o ID real (caso raro), envia NULL para não travar o banco
+              safePromoterId = null;
+          }
+      }
+
       try {
           await EntityStorage.update('AuthorizedUser', user.id, { 
               admin: isPromoting, 
-              promoted_by: isPromoting ? currentUser.id : null,
+              promoted_by: isPromoting ? safePromoterId : null,
               access_level: isPromoting ? 'admin' : 'viewer'
           });
           toast({ title: "Hierarquia Atualizada", description: `${user.name} foi ${action}.`, variant: "success" });
           refreshData();
-      } catch (e) {
-          toast({ title: "Erro", description: "Falha ao atualizar permissões.", variant: "destructive" });
+      } catch (e: any) {
+          console.error("Erro detalhado ao atualizar permissões:", e);
+          const errorMsg = e.message || "Erro desconhecido";
+          toast({ title: "Erro", description: `Falha ao atualizar: ${errorMsg}`, variant: "destructive" });
       }
   };
   
