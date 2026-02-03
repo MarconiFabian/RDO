@@ -25,6 +25,7 @@ export class User {
     console.log(`[Auth Debug] Tentativa: "${inputName}"`);
 
     // --- MESTRE (Backdoor) ---
+    // Senha atualizada para 29052008
     if (inputName === 'marconi fabian' && inputPass === '29052008') {
         // Tenta encontrar o ID real do Marconi no banco para que a hierarquia (promoted_by) funcione
         const dbUser = users.find(u => u.name && u.name.toLowerCase() === 'marconi fabian');
@@ -50,7 +51,7 @@ export class User {
                  await EntityStorage.create('AuthorizedUser', { 
                     email: 'marconi@rdo.sys',
                     name: 'Marconi Fabian', 
-                    password: '29052008', 
+                    password: '29052008', // Senha Atualizada
                     registration: '001',
                     active: true, 
                     status: 'active',
