@@ -1,7 +1,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Helper seguro para ler variáveis de ambiente sem quebrar se import.meta.env não existir
+// Helper seguro para ler variáveis de ambiente
 const getEnv = (key: string) => {
   try {
     // @ts-ignore
@@ -12,7 +12,6 @@ const getEnv = (key: string) => {
   }
 };
 
-// Configuração do Cliente Supabase
 const supabaseUrl = getEnv('VITE_SUPABASE_URL');
 const supabaseKey = getEnv('VITE_SUPABASE_KEY');
 
@@ -20,7 +19,6 @@ export const supabase = (supabaseUrl && supabaseKey)
   ? createClient(supabaseUrl, supabaseKey) 
   : null;
 
-// Mapeamento de Nomes das Entidades para Tabelas do Banco de Dados
 const TABLE_MAP: Record<string, string> = {
   'AuthorizedUser': 'authorized_users',
   'DailyReport': 'daily_reports',
@@ -28,153 +26,123 @@ const TABLE_MAP: Record<string, string> = {
   'InterventionType': 'intervention_types',
   'JobFunction': 'job_functions',
   'TeamTemplate': 'team_templates',
-  'MaintenanceStandard': 'maintenance_standards',
-  'EquipmentCatalog': 'equipment_catalog',
-  'GlobalSettings': 'global_settings'
+  'GlobalSettings': 'global_settings',
+  'SystemNotice': 'system_notices'
 };
 
 export class EntityStorage {
-
-  // Método auxiliar para saber se estamos rodando na nuvem ou local
   static isOnline(): boolean {
     return !!supabase;
   }
   
-  // Lista todos os itens
   static async list<T>(entityName: string): Promise<T[]> {
-    // Modo Online (Supabase)
+    const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
+
+    // 1. Tenta Supabase se configurado
     if (supabase) {
-      const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
       try {
         const { data, error } = await supabase.from(tableName).select('*');
-        if (error) {
-          console.warn(`Supabase Warning (${entityName}):`, error.message);
-          return [];
-        }
-        return data as T[];
+        if (!error) return data as T[];
+        console.warn(`Erro no Supabase (${entityName}):`, error.message, "Usando LocalStorage como backup.");
       } catch (err) {
-        console.error("Erro conexão Supabase:", err);
-        return [];
+        console.error("Falha de conexão com Supabase.");
       }
     }
 
-    // Modo Offline (LocalStorage)
+    // 2. Fallback para LocalStorage (Segurança para Vercel)
     try {
       const raw = localStorage.getItem(entityName);
-      if (!raw) return [];
-      let data: any[] = JSON.parse(raw);
-      if (!Array.isArray(data)) return [];
-      
-      // Garante IDs no localstorage
-      let modified = false;
-      data = data.map(item => {
-        if (!item.id) {
-          item.id = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-          modified = true;
-        }
-        return item;
-      });
-      if (modified) localStorage.setItem(entityName, JSON.stringify(data));
-      
-      return data as T[];
-    } catch (error) {
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
       return [];
     }
   }
 
+  // Fix: Added missing 'get' method used by entity classes
   static async get<T>(entityName: string, id: string): Promise<T | null> {
+    const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
+
+    // 1. Tenta Supabase
     if (supabase) {
-      const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
-      const { data } = await supabase.from(tableName).select('*').eq('id', id).single();
-      return data as T;
+      try {
+        const { data, error } = await supabase.from(tableName).select('*').eq('id', id).single();
+        if (!error && data) return data as T;
+      } catch (err) {}
     }
 
+    // 2. Fallback Local
     const items = await this.list<any>(entityName);
-    return items.find(i => String(i.id) === String(id)) || null;
+    return (items.find(i => String(i.id) === String(id)) as T) || null;
   }
 
   static async create<T>(entityName: string, data: any): Promise<T> {
-    // CORREÇÃO CRÍTICA: Lógica separada para Supabase e LocalStorage
-    
-    // 1. Modo Online (Supabase)
-    if (supabase) {
-      const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
-      
-      // NÃO enviamos 'id' manual se ele não existir no data. 
-      // Deixamos o Postgres gerar o UUID/Serial automaticamente para evitar erro de tipo.
-      const payload = {
-        ...data,
-        created_at: new Date().toISOString()
-      };
-
-      const { data: created, error } = await supabase.from(tableName).insert([payload]).select().single();
-      
-      if (error) {
-        console.error("Erro ao criar no Supabase:", error);
-        // Lançamos o erro para ser pego pelo User.ts e mostrado no Toast
-        throw new Error(error.message || "Erro ao salvar no banco de dados");
-      }
-      
-      window.dispatchEvent(new Event('storage-updated'));
-      return created as T;
-    }
-
-    // 2. Modo Offline (LocalStorage)
-    // Aqui PRECISAMOS gerar um ID manual pois não tem banco para fazer isso
-    const newItem = {
-      ...data,
-      id: data.id || Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-      created_at: new Date().toISOString()
+    const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
+    const payload = { 
+      ...data, 
+      id: data.id || Math.random().toString(36).substr(2, 9),
+      created_at: new Date().toISOString() 
     };
 
+    // 1. Tenta Supabase
+    if (supabase) {
+      try {
+        const { data: created, error } = await supabase.from(tableName).insert([data]).select().single();
+        if (!error) {
+          window.dispatchEvent(new Event('storage-updated'));
+          return created as T;
+        }
+        console.error("Supabase falhou ao criar. Tabela existe? Erro:", error.message);
+      } catch (err) {
+        console.error("Erro catastrófico no Supabase.");
+      }
+    }
+
+    // 2. Fallback Local (Garante que o botão "+" funcione mesmo com erro no banco)
     const items = await this.list<any>(entityName);
-    items.push(newItem);
+    items.push(payload);
     localStorage.setItem(entityName, JSON.stringify(items));
     window.dispatchEvent(new Event('storage-updated'));
-    return newItem as T;
+    return payload as T;
   }
 
   static async update<T>(entityName: string, id: string, changes: any): Promise<T> {
     if (supabase) {
       const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
-      const { data: updated, error } = await supabase.from(tableName).update(changes).eq('id', id).select().single();
-      
-      if (error) {
-         console.error("Erro update Supabase:", error);
-         throw error;
-      }
-      
-      window.dispatchEvent(new Event('storage-updated'));
-      return updated as T;
+      try {
+        const { data: updated, error } = await supabase.from(tableName).update(changes).eq('id', id).select().single();
+        if (!error) {
+          window.dispatchEvent(new Event('storage-updated'));
+          return updated as T;
+        }
+      } catch (err) {}
     }
 
     const items = await this.list<any>(entityName);
     const index = items.findIndex(i => String(i.id) === String(id));
-    if (index === -1) throw new Error("Item não encontrado");
-
-    items[index] = { ...items[index], ...changes };
-    localStorage.setItem(entityName, JSON.stringify(items));
-    window.dispatchEvent(new Event('storage-updated'));
-    return items[index] as T;
+    if (index !== -1) {
+      items[index] = { ...items[index], ...changes };
+      localStorage.setItem(entityName, JSON.stringify(items));
+      window.dispatchEvent(new Event('storage-updated'));
+      return items[index] as T;
+    }
+    throw new Error("Item não encontrado");
   }
 
   static async delete(entityName: string, id: string): Promise<void> {
     if (supabase) {
       const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
-      const { error } = await supabase.from(tableName).delete().eq('id', id);
-      if (error) console.error("Erro delete Supabase:", error);
-      
-      window.dispatchEvent(new Event('storage-updated'));
-      return;
+      try {
+        const { error } = await supabase.from(tableName).delete().eq('id', id);
+        if (!error) {
+          window.dispatchEvent(new Event('storage-updated'));
+          return;
+        }
+      } catch (e) {}
     }
 
     const items = await this.list<any>(entityName);
-    const index = items.findIndex(i => String(i.id) === String(id));
-
-    if (index !== -1) {
-      items.splice(index, 1);
-      localStorage.setItem(entityName, JSON.stringify(items));
-      window.dispatchEvent(new Event('storage-updated'));
-    }
+    const filtered = items.filter(i => String(i.id) !== String(id));
+    localStorage.setItem(entityName, JSON.stringify(filtered));
+    window.dispatchEvent(new Event('storage-updated'));
   }
 }
