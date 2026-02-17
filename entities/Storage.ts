@@ -38,18 +38,16 @@ export class EntityStorage {
   static async list<T>(entityName: string): Promise<T[]> {
     const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
 
-    // 1. Tenta Supabase se configurado
     if (supabase) {
       try {
         const { data, error } = await supabase.from(tableName).select('*');
-        if (!error) return data as T[];
-        console.warn(`Erro no Supabase (${entityName}):`, error.message, "Usando LocalStorage como backup.");
+        if (!error && data) return data as T[];
+        console.warn(`[Storage] Supabase list error (${entityName}):`, error?.message);
       } catch (err) {
-        console.error("Falha de conexão com Supabase.");
+        console.error(`[Storage] Supabase connection failed for ${entityName}`);
       }
     }
 
-    // 2. Fallback para LocalStorage (Segurança para Vercel)
     try {
       const raw = localStorage.getItem(entityName);
       return raw ? JSON.parse(raw) : [];
@@ -58,11 +56,9 @@ export class EntityStorage {
     }
   }
 
-  // Fix: Added missing 'get' method used by entity classes
   static async get<T>(entityName: string, id: string): Promise<T | null> {
     const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
 
-    // 1. Tenta Supabase
     if (supabase) {
       try {
         const { data, error } = await supabase.from(tableName).select('*').eq('id', id).single();
@@ -70,34 +66,44 @@ export class EntityStorage {
       } catch (err) {}
     }
 
-    // 2. Fallback Local
     const items = await this.list<any>(entityName);
     return (items.find(i => String(i.id) === String(id)) as T) || null;
   }
 
   static async create<T>(entityName: string, data: any): Promise<T> {
     const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
+    
+    // Preparamos o objeto completo com ID local e Data
+    const localId = Math.random().toString(36).substr(2, 9);
     const payload = { 
       ...data, 
-      id: data.id || Math.random().toString(36).substr(2, 9),
-      created_at: new Date().toISOString() 
+      id: data.id || localId,
+      created_at: data.created_at || new Date().toISOString() 
     };
 
-    // 1. Tenta Supabase
+    // 1. Tenta Supabase (se configurado)
     if (supabase) {
       try {
-        const { data: created, error } = await supabase.from(tableName).insert([data]).select().single();
-        if (!error) {
+        // No Supabase, enviamos sem o ID se for UUID (para o banco gerar) 
+        // ou com o ID se o banco aceitar string. 
+        // Aqui tentamos enviar o objeto completo.
+        const { data: created, error } = await supabase.from(tableName).insert([payload]).select().single();
+        
+        if (!error && created) {
+          console.log(`[Storage] Sucesso no Supabase (${entityName})`);
           window.dispatchEvent(new Event('storage-updated'));
           return created as T;
         }
-        console.error("Supabase falhou ao criar. Tabela existe? Erro:", error.message);
+        
+        // Se der erro de "Tabela não encontrada" ou "RLS", avisamos e seguimos para o LocalStorage
+        console.error(`[Storage] Erro Supabase (${entityName}):`, error?.message);
       } catch (err) {
-        console.error("Erro catastrófico no Supabase.");
+        console.error(`[Storage] Falha crítica de rede com Supabase.`);
       }
     }
 
-    // 2. Fallback Local (Garante que o botão "+" funcione mesmo com erro no banco)
+    // 2. Fallback Local (Garante funcionamento na Vercel mesmo sem banco configurado)
+    console.log(`[Storage] Salvando localmente (${entityName})`);
     const items = await this.list<any>(entityName);
     items.push(payload);
     localStorage.setItem(entityName, JSON.stringify(items));
@@ -106,11 +112,12 @@ export class EntityStorage {
   }
 
   static async update<T>(entityName: string, id: string, changes: any): Promise<T> {
+    const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
+
     if (supabase) {
-      const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
       try {
         const { data: updated, error } = await supabase.from(tableName).update(changes).eq('id', id).select().single();
-        if (!error) {
+        if (!error && updated) {
           window.dispatchEvent(new Event('storage-updated'));
           return updated as T;
         }
@@ -129,13 +136,14 @@ export class EntityStorage {
   }
 
   static async delete(entityName: string, id: string): Promise<void> {
+    const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
+
     if (supabase) {
-      const tableName = TABLE_MAP[entityName] || entityName.toLowerCase();
       try {
         const { error } = await supabase.from(tableName).delete().eq('id', id);
         if (!error) {
-          window.dispatchEvent(new Event('storage-updated'));
-          return;
+           window.dispatchEvent(new Event('storage-updated'));
+           // Se deletou no supabase, não retornamos para que também delete no local caso haja redundância
         }
       } catch (e) {}
     }
