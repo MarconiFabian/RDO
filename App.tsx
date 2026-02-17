@@ -7,13 +7,15 @@ import { ManagementPage } from './pages/ManagementPage';
 import { AnalysisPage } from './pages/AnalysisPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 import { TeamTemplatePage } from './pages/TeamTemplatePage';
-import { NotificationsPage } from './pages/NotificationsPage'; // Novo Import
+import { NotificationsPage } from './pages/NotificationsPage'; 
 import { LoginPage } from './pages/LoginPage';
 import { Toaster } from './components/ui/use-toast';
 import { User } from './entities/User';
 import { EntityStorage } from './entities/Storage';
+import { GlobalSettings } from './entities/GlobalSettings';
 import { Wifi, WifiOff } from 'lucide-react';
 import { NoticeModal } from './components/notices/NoticeModal'; 
+import { SYSTEM_CONFIG } from './utils';
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.hash || '#/');
@@ -26,6 +28,24 @@ export default function App() {
     setCurrentUser(user);
     setLoading(false);
   };
+
+  // Sincroniza o Favicon (ícone da aba) com a logo personalizada
+  useEffect(() => {
+    const updateFavicon = async () => {
+      const customLogo = await GlobalSettings.getLogo() || localStorage.getItem('custom_logo');
+      const favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
+      const appleIcon = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement;
+      
+      const logoUrl = customLogo || SYSTEM_CONFIG.defaultLogo;
+      
+      if (favicon) favicon.href = logoUrl;
+      if (appleIcon) appleIcon.href = logoUrl;
+    };
+
+    updateFavicon();
+    window.addEventListener('storage-updated', updateFavicon);
+    return () => window.removeEventListener('storage-updated', updateFavicon);
+  }, []);
 
   useEffect(() => {
     checkAuth();
@@ -73,7 +93,7 @@ export default function App() {
     if (hash === '#/DailyReport') return <DailyReportPage />;
     if (hash === '#/Resources') return <ResourcesPage />;
     if (hash === '#/TeamTemplate') return <TeamTemplatePage />;
-    if (hash === '#/Notifications') return <NotificationsPage />; // Nova Rota
+    if (hash === '#/Notifications') return <NotificationsPage />; 
     
     return <HomePage />;
   };
@@ -81,7 +101,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0f2441] font-sans antialiased text-slate-900 overflow-x-hidden selection:bg-sky-200">
       
-      {/* Sistema de Notificações Prioritárias (Bloqueia a tela se houver aviso não lido) */}
+      {/* Sistema de Notificações Prioritárias */}
       <NoticeModal />
 
       {renderPage()}

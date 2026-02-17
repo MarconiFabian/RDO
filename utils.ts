@@ -18,7 +18,7 @@ export const getQueryParams = () => {
 
 // Configurações Globais do Sistema
 export const SYSTEM_CONFIG = {
-  // Agora aponta para o arquivo local na pasta public
-  defaultLogo: "/logo.png",
+  // Caminho da logo padrão (mude aqui se quiser alterar o arquivo fixo)
+  defaultLogo: "/logo.png", 
   appName: "RDO Online"
 };
