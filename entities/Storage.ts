@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 // Helper seguro para ler variáveis de ambiente
@@ -17,7 +16,10 @@ const supabaseKey = getEnv('VITE_SUPABASE_KEY');
 
 export const supabase = (supabaseUrl && supabaseKey) 
   ? createClient(supabaseUrl, supabaseKey) 
-  : null;
+  : (() => {
+      console.error('[Storage] ERRO CRÍTICO: Chaves do Supabase não encontradas. Verifique as Variáveis de Ambiente no Vercel (VITE_SUPABASE_URL e VITE_SUPABASE_KEY).');
+      return null;
+    })();
 
 const TABLE_MAP: Record<string, string> = {
   'AuthorizedUser': 'authorized_users',
@@ -93,11 +95,15 @@ export class EntityStorage {
       try {
         const { data: created, error } = await supabase.from(tableName).insert([payload]).select().single();
         if (!error && created) {
+          console.log(`[Storage] Gravado com sucesso na Nuvem (${entityName})`);
           window.dispatchEvent(new Event('storage-updated'));
           return created as T;
         }
-        console.error(`[Storage] Supabase recusou gravação em ${entityName}. Usando fallback local.`);
-      } catch (err) {}
+        console.error(`[Storage] Erro ao gravar no Supabase (${entityName}):`, error?.message || 'Erro desconhecido');
+        console.warn(`[Storage] Usando fallback local para ${entityName}.`);
+      } catch (err) {
+        console.error(`[Storage] Exceção na gravação em ${entityName}:`, err);
+      }
     }
 
     // 2. Fallback: Salva no LocalStorage se a nuvem falhar
